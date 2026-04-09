@@ -14,7 +14,7 @@
 
 ## Sprint 3
 
-- Replace the mock engine with a real Schrute adapter
+- Replace the mock engine with a real workflow-service adapter
 - Connect Griffin pilot pack
 - Connect Cadence pilot pack
 

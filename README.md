@@ -2,12 +2,12 @@
 
 Case-first compliance search orchestration for non-technical analysts.
 
-This repository is the first pilot build for an enterprise-friendly compliance workbench inspired by Schrute's automation model. It is designed to be:
+This repository is the first pilot build for an enterprise-friendly compliance workbench built around a reusable workflow-engine pattern. It is designed to be:
 
 - easy for analysts to learn
 - safe to demo on a single machine
 - ready to evolve into a real Griffin and Cadence search runner
-- structured so we can swap the mock engine for Schrute later
+- structured so we can swap the mock engine for a live workflow service later
 
 ## What is in this first version
 
@@ -15,7 +15,7 @@ This repository is the first pilot build for an enterprise-friendly compliance w
 - Search Pack Studio for admins
 - Governance and rollout views
 - In-memory case queue and evidence model
-- Mock automation engine with a clear Schrute adapter seam
+- Mock automation engine with a clear live-service adapter seam
 - Zero third-party Python dependencies
 
 ## Run it
@@ -59,21 +59,13 @@ The current engine is intentionally mocked. The integration seam lives in `raven
 
 Planned production path:
 
-1. Replace the mock engine with a Schrute-backed adapter.
+1. Replace the mock engine with a live workflow adapter.
 2. Persist cases, packs, evidence, and audit events in enterprise storage.
 3. Add SSO, RBAC, maker-checker approval, and session brokering.
 4. Publish certified Search Packs for Griffin, Cadence, and approved public websites.
 
-## What I need from you to publish to GitHub
+## Repository
 
-Use only your personal Gmail GitHub account.
-
-Please create an empty GitHub repository and send me:
-
-- your GitHub username
-- the repository URL
-- whether you want it private or public
-
-Repository:
+GitHub:
 
 `Rvnderdahiya/Ravender_compliance_workbench`

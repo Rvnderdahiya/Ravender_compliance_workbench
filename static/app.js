@@ -351,7 +351,7 @@ function renderAnalystView() {
         ${
           !canRun
             ? `<p class="tiny">Only published packs are runnable from the analyst workbench.</p>`
-            : `<p class="tiny">This pilot runs a deterministic engine now and is structured to map to Schrute later.</p>`
+            : `<p class="tiny">This pilot runs a deterministic engine now and is structured to map to a live workflow service later.</p>`
         }
       </section>
 

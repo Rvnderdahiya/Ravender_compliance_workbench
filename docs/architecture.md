@@ -2,7 +2,7 @@
 
 ## Goal
 
-Wrap a workflow engine such as Schrute in an analyst-friendly compliance workbench that hides automation internals and exposes only certified search experiences.
+Wrap a reusable workflow engine in an analyst-friendly compliance workbench that hides automation internals and exposes only certified search experiences.
 
 ## Current pilot architecture
 
@@ -12,7 +12,7 @@ flowchart LR
     B --> C["Workbench Repository"]
     C --> D["Automation Engine Interface"]
     D --> E["Mock Engine"]
-    D --> F["Future Schrute Adapter"]
+    D --> F["Future Live Adapter"]
 ```
 
 ## Operating model
@@ -40,7 +40,7 @@ flowchart LR
 - Audit streaming to enterprise logging
 - Health checks and pack re-certification
 
-## Schrute integration path
+## Integration path
 
 The integration seam is the `engine` object used by `WorkbenchRepository`.
 
@@ -50,7 +50,7 @@ The integration seam is the `engine` object used by `WorkbenchRepository`.
 
 ### Next
 
-- `SchruteAdapter` should translate a Search Pack into one or more approved Schrute skills or workflows.
+- `WorkflowServiceAdapter` should translate a Search Pack into one or more approved workflow actions.
 - Each pack step should map to a certified source action.
 - Source outputs should be normalized into the case evidence schema used by the UI.
 
@@ -63,7 +63,7 @@ flowchart TD
     C --> D["Case Store"]
     C --> E["Evidence Store"]
     C --> F["Session Broker"]
-    C --> G["Schrute Service"]
+    C --> G["Workflow Service"]
     G --> H["Certified Griffin Pack"]
     G --> I["Certified Cadence Pack"]
     G --> J["Certified Public-Web Pack"]
@@ -77,4 +77,3 @@ flowchart TD
 - Evidence timestamps on every artifact
 - Reviewer approval before pack publication
 - Explicit session-handoff handling for internal portals
-

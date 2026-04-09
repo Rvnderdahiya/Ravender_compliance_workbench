@@ -179,18 +179,18 @@ class MockAutomationEngine:
         }
 
 
-class SchruteAdapter:
+class WorkflowServiceAdapter:
     def __init__(self, base_url: str, auth_token: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth_token = auth_token
-        self.name = "schrute-adapter-placeholder"
+        self.name = "workflow-service-placeholder"
 
     def run_pack(self, case_record: dict, pack_record: dict) -> dict:
         return {
             "engine": self.name,
             "runMode": "placeholder",
             "summary": (
-                "Schrute adapter is configured but not yet wired to execute certified Search Packs. "
+                "Live workflow adapter is configured but not yet wired to execute certified Search Packs. "
                 "Use mock mode for pilot demos until workflow mapping is implemented."
             ),
             "recommendedDecision": "Needs Review",
@@ -199,7 +199,7 @@ class SchruteAdapter:
             "auditEvent": {
                 "time": utc_now(),
                 "actor": "System",
-                "message": f"Schrute adapter placeholder invoked for {pack_record['name']} at {self.base_url}.",
+                "message": f"Live workflow adapter placeholder invoked for {pack_record['name']} at {self.base_url}.",
             },
         }
 
@@ -207,15 +207,15 @@ class SchruteAdapter:
         return {
             "engine": self.name,
             "sourceId": source_id,
-            "message": "Source resume will be implemented when live Schrute session routing is connected.",
+            "message": "Source resume will be implemented when live session routing is connected.",
             "taskUpdate": None,
             "evidence": [],
         }
 
 
 def build_engine():
-    base_url = os.environ.get("SCHRUTE_BASE_URL", "").strip()
-    auth_token = os.environ.get("SCHRUTE_AUTH_TOKEN", "").strip() or None
+    base_url = os.environ.get("RAVENDER_ENGINE_BASE_URL", "").strip()
+    auth_token = os.environ.get("RAVENDER_ENGINE_AUTH_TOKEN", "").strip() or None
     if base_url:
-        return SchruteAdapter(base_url=base_url, auth_token=auth_token)
+        return WorkflowServiceAdapter(base_url=base_url, auth_token=auth_token)
     return MockAutomationEngine()

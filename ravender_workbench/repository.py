@@ -273,7 +273,7 @@ class WorkbenchRepository:
                     },
                     {
                         "name": "Platform",
-                        "focus": "Schrute integration, persistence, SSO, and RBAC",
+                        "focus": "Workflow-service integration, persistence, SSO, and RBAC",
                         "outcome": "Controlled internal testing with real sources",
                     },
                     {
