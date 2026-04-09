@@ -46,6 +46,14 @@ def blank_recording_form() -> dict:
     }
 
 
+def blank_recording_session_form() -> dict:
+    return {
+        "agendaType": "",
+        "goal": "",
+        "captureScreenshots": False,
+    }
+
+
 @dataclass
 class WorkbenchRepository:
     engine: object
@@ -115,6 +123,18 @@ class WorkbenchRepository:
                 for key in ("actionType", "pageName", "targetLabel", "selectorHint", "value", "notes"):
                     if key in recording_form:
                         builder["recordingForm"][key] = str(recording_form.get(key) or builder["recordingForm"][key])
+            session_form = loaded_builder.get("recordingSessionForm", {})
+            if isinstance(session_form, dict):
+                if "agendaType" in session_form:
+                    builder["recordingSessionForm"]["agendaType"] = str(
+                        session_form.get("agendaType") or builder["recordingSessionForm"]["agendaType"]
+                    )
+                if "goal" in session_form:
+                    builder["recordingSessionForm"]["goal"] = str(
+                        session_form.get("goal") or builder["recordingSessionForm"]["goal"]
+                    )
+                if "captureScreenshots" in session_form:
+                    builder["recordingSessionForm"]["captureScreenshots"] = bool(session_form.get("captureScreenshots"))
             if isinstance(loaded_builder.get("drafts"), list):
                 builder["drafts"] = [self._normalize_source_draft(draft) for draft in loaded_builder["drafts"][:12]]
 
@@ -137,6 +157,9 @@ class WorkbenchRepository:
             "updatedAt": str(draft.get("updatedAt") or utc_now()),
             "lastLaunchedAt": str(draft.get("lastLaunchedAt") or ""),
             "lastRecordingEventAt": str(draft.get("lastRecordingEventAt") or ""),
+            "recordingAgendaType": str(draft.get("recordingAgendaType") or "").strip(),
+            "recordingGoal": str(draft.get("recordingGoal") or "").strip(),
+            "captureScreenshots": bool(draft.get("captureScreenshots", False)),
             "steps": [],
         }
 
@@ -174,7 +197,7 @@ class WorkbenchRepository:
         return {
             "product": {
                 "name": "Ravender Workbench",
-                "version": "0.5.0",
+                "version": "0.6.0",
                 "tagline": "Case-first investigations for analysts, with website investigation and source-definition workflows.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
@@ -452,9 +475,32 @@ class WorkbenchRepository:
             },
             "sourceBuilder": {
                 "form": blank_source_builder_form(),
+                "recordingSessionForm": blank_recording_session_form(),
                 "recordingForm": blank_recording_form(),
                 "sourceTypes": ["Public website", "Login website", "Internal portal"],
-                "actionTypes": ["Open page", "Click", "Type text", "Select option", "Wait", "Open result", "Extract value"],
+                "agendaTypes": [
+                    {
+                        "id": "search",
+                        "label": "Search workflow",
+                        "description": "Use this when the admin is teaching the tool how to search by name, company, or other lookup inputs.",
+                    },
+                    {
+                        "id": "task",
+                        "label": "Perform a task",
+                        "description": "Use this when the admin is teaching a multi-step workflow such as opening records or moving through a process.",
+                    },
+                    {
+                        "id": "evidence",
+                        "label": "Capture screenshots",
+                        "description": "Use this when the main goal is evidence capture, page checkpoints, or screenshot-oriented review.",
+                    },
+                    {
+                        "id": "extract",
+                        "label": "Extract profile data",
+                        "description": "Use this when the admin wants the tool to land on pages and pull structured result fields later.",
+                    },
+                ],
+                "actionTypes": ["Open page", "Click", "Type text", "Select option", "Wait", "Open result", "Extract value", "Capture screenshot"],
                 "drafts": [],
                 "workflow": [
                     "Add New Source",
@@ -466,7 +512,7 @@ class WorkbenchRepository:
                 ],
                 "notes": [
                     "Source definitions are saved locally as drafts on this machine.",
-                    "Record Steps is now live as a guided admin workspace for capturing flows one step at a time.",
+                    "Record Steps now starts with an agenda so the admin can say what kind of workflow is being taught before recording begins.",
                     "Automatic browser instrumentation, input mapping, testing, and publishing still come in later slices.",
                 ],
             },
@@ -708,7 +754,15 @@ class WorkbenchRepository:
                 "message": f'Source draft saved for {cleaned_name}.',
             }
 
-    def update_source_recording_action(self, draft_id: str, action: str) -> dict:
+    def update_source_recording_action(
+        self,
+        draft_id: str,
+        action: str,
+        *,
+        agenda_type: str = "",
+        goal: str = "",
+        capture_screenshots: bool = False,
+    ) -> dict:
         with self._lock:
             builder = self._state["sourceBuilder"]
             draft = self._find_source_draft(draft_id)
@@ -725,11 +779,30 @@ class WorkbenchRepository:
                 raise ValueError("Unsupported recording action.")
 
             status, message = action_map[action]
+            if action == "start":
+                allowed_agendas = {entry["id"] for entry in builder["agendaTypes"]}
+                cleaned_agenda = str(agenda_type or "").strip()
+                if cleaned_agenda not in allowed_agendas:
+                    raise ValueError("Choose a recording agenda before starting.")
+                draft["recordingAgendaType"] = cleaned_agenda
+                draft["recordingGoal"] = str(goal or "").strip()
+                draft["captureScreenshots"] = bool(capture_screenshots)
+                builder["recordingSessionForm"] = {
+                    "agendaType": cleaned_agenda,
+                    "goal": draft["recordingGoal"],
+                    "captureScreenshots": draft["captureScreenshots"],
+                }
             draft["recordingStatus"] = status
             draft["updatedAt"] = timestamp
             draft["lastRecordingEventAt"] = timestamp
             if action == "launch":
                 draft["lastLaunchedAt"] = timestamp
+            if action == "save":
+                builder["recordingSessionForm"] = {
+                    "agendaType": draft["recordingAgendaType"],
+                    "goal": draft["recordingGoal"],
+                    "captureScreenshots": draft["captureScreenshots"],
+                }
 
             self._persist_state()
             return {
@@ -753,6 +826,8 @@ class WorkbenchRepository:
         with self._lock:
             builder = self._state["sourceBuilder"]
             draft = self._find_source_draft(draft_id)
+            if not draft["recordingAgendaType"]:
+                raise ValueError("Start a guided recording session before adding steps.")
             cleaned_action_type = str(action_type or "").strip()
             if cleaned_action_type not in set(builder["actionTypes"]):
                 raise ValueError("A valid action type is required.")
@@ -762,8 +837,8 @@ class WorkbenchRepository:
             cleaned_selector_hint = str(selector_hint or "").strip()
             cleaned_value = str(value or "").strip()
             cleaned_notes = str(notes or "").strip()
-            if not cleaned_target_label and not cleaned_selector_hint and not cleaned_value:
-                raise ValueError("Add at least a target label, selector hint, or value.")
+            if not cleaned_target_label and not cleaned_selector_hint and not cleaned_value and not cleaned_notes:
+                raise ValueError("Add at least a target label, selector hint, value, or note.")
 
             timestamp = utc_now()
             next_sequence = len(draft["steps"]) + 1

@@ -389,7 +389,8 @@ body {
 
 .toolbar,
 .button-row,
-.preset-row {
+.preset-row,
+.quick-action-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -414,6 +415,18 @@ label {
   font-size: 0.84rem;
   color: var(--ink-soft);
   font-weight: 800;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
 }
 
 select,
@@ -615,6 +628,21 @@ textarea {
 .sidebar-run-card.is-active {
   border-color: rgba(183, 90, 44, 0.26);
   background: linear-gradient(135deg, rgba(255, 248, 239, 0.95), rgba(255, 241, 228, 0.9));
+  box-shadow: var(--shadow-md);
+}
+
+.agenda-card {
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.agenda-card:hover {
+  transform: translateY(-1px);
+}
+
+.agenda-card.is-active {
+  border-color: rgba(14, 111, 105, 0.3);
+  background: linear-gradient(135deg, rgba(222, 245, 241, 0.95), rgba(238, 252, 249, 0.92));
   box-shadow: var(--shadow-md);
 }
 

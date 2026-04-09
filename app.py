@@ -20,7 +20,7 @@ REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workben
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.5"
+    server_version = "RavenderWorkbench/0.6"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -112,7 +112,15 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if not action:
                     self._send_json({"error": "action is required"}, status=HTTPStatus.BAD_REQUEST)
                     return
-                self._send_json(REPO.update_source_recording_action(draft_id, action))
+                self._send_json(
+                    REPO.update_source_recording_action(
+                        draft_id,
+                        action,
+                        agenda_type=str(payload.get("agendaType", "")).strip(),
+                        goal=str(payload.get("goal", "")).strip(),
+                        capture_screenshots=bool(payload.get("captureScreenshots", False)),
+                    )
+                )
                 return
 
             recording_step_match = re.fullmatch(r"/api/source-builder/drafts/([^/]+)/steps", path)

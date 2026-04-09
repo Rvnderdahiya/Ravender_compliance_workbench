@@ -14,7 +14,7 @@ This repository is a stronger pilot build for an enterprise-friendly compliance 
 
 - Analyst workbench UI
 - Website Investigator for live public-website crawling and term matching
-- Source Builder with draft source definitions and guided recorded-step capture
+- Source Builder with draft source definitions and agenda-first guided recording
 - Search Pack Studio for admins
 - Governance and rollout views
 - Local JSON-backed state so recent runs survive app restarts on one machine
@@ -58,9 +58,11 @@ You can now test the Source Builder slices:
 3. Click `Save Draft Source`.
 4. Confirm the draft appears in the left rail and survives a refresh.
 5. Select the draft and click `Launch Site`.
-6. Click `Start Recording`.
-7. Add recorded steps one by one using `Action type`, `Target label`, `Selector hint`, `Value`, and `Notes`.
-8. Click `Pause`, `Stop`, and `Save Recording`.
+6. Pick the agenda first, such as `Search workflow`, `Perform a task`, `Capture screenshots`, or `Extract profile data`.
+7. Optionally describe the goal and decide whether screenshot checkpoints should be included.
+8. Click the single guided start button.
+9. Add recorded steps one by one using `Action type`, `Target label`, `Selector hint`, `Value`, and `Notes`.
+10. Click `Pause`, `Stop`, and `Save Recording`.
 
 ## Repo structure
 

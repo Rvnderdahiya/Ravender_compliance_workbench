@@ -60,7 +60,15 @@ function bindEvents() {
     const sourceDraftCard = event.target.closest("[data-source-draft-id]");
     if (sourceDraftCard) {
       state.activeSourceDraftId = sourceDraftCard.dataset.sourceDraftId;
+      syncSourceBuilderFormsFromDraft();
       resetSourceRecordingForm();
+      render();
+      return;
+    }
+
+    const agendaCard = event.target.closest("[data-agenda-type]");
+    if (agendaCard) {
+      state.data.sourceBuilder.recordingSessionForm.agendaType = agendaCard.dataset.agendaType;
       render();
       return;
     }
@@ -114,6 +122,12 @@ function bindEvents() {
 
     if (action.dataset.action === "add-recording-step") {
       await addRecordingStep();
+      return;
+    }
+
+    if (action.dataset.action === "pick-recording-action-type") {
+      state.data.sourceBuilder.recordingForm.actionType = action.dataset.actionType;
+      render();
       return;
     }
 
@@ -185,6 +199,12 @@ function bindEvents() {
     if (target.id === "builder-action-type") {
       state.data.sourceBuilder.recordingForm.actionType = target.value;
       render();
+      return;
+    }
+
+    if (target.id === "builder-capture-screenshots") {
+      state.data.sourceBuilder.recordingSessionForm.captureScreenshots = target.checked;
+      render();
     }
   });
 
@@ -254,6 +274,11 @@ function bindEvents() {
 
     if (target.id === "builder-step-notes") {
       state.data.sourceBuilder.recordingForm.notes = target.value;
+      return;
+    }
+
+    if (target.id === "builder-agenda-goal") {
+      state.data.sourceBuilder.recordingSessionForm.goal = target.value;
     }
   });
 }
@@ -281,6 +306,7 @@ async function fetchBootstrap() {
   if ((!state.activeSourceDraftId || !draftStillExists) && sourceDrafts.length > 0) {
     state.activeSourceDraftId = sourceDrafts[0].id;
   }
+  syncSourceBuilderFormsFromDraft();
 
   render();
 }
@@ -705,13 +731,22 @@ function renderSourceBuilderView() {
   const builder = state.data.sourceBuilder;
   const form = builder.form;
   const activeDraft = getActiveSourceDraft();
+  const sessionForm = builder.recordingSessionForm;
   const recordingForm = builder.recordingForm;
   const recordingSteps = activeDraft?.steps || [];
   const recordingReady = Boolean(activeDraft);
+  const sessionStarted = Boolean(activeDraft && activeDraft.recordingAgendaType && ["Recording", "Paused", "Stopped", "Saved"].includes(activeDraft.recordingStatus));
+  const activeAgenda = builder.agendaTypes.find((agenda) => agenda.id === (activeDraft?.recordingAgendaType || sessionForm.agendaType)) || null;
+  const canStartRecording = Boolean(recordingReady && activeAgenda);
+  const startRecordingLabel = sessionStarted
+    ? "Restart Guided Recording"
+    : activeAgenda
+      ? `Start ${activeAgenda.label}`
+      : "Choose Agenda To Start";
 
   return `
     <div class="builder-layout">
-      <section class="summary-card">
+        <section class="summary-card">
         <div class="title-line">
           <div>
             <p class="section-label">Admin-only builder</p>
@@ -817,56 +852,117 @@ function renderSourceBuilderView() {
             `
             : `<div class="empty-state">Save a draft source first, then select it from the left rail to begin recording steps.</div>`
         }
-        <div class="button-row">
-          <button class="btn btn-primary" data-action="launch-source-site" ${recordingReady ? "" : "disabled"}>Launch Site</button>
-          <button class="btn btn-secondary" data-action="source-recording-action" data-recording-action="start" ${recordingReady ? "" : "disabled"}>Start Recording</button>
-          <button class="btn btn-soft" data-action="source-recording-action" data-recording-action="pause" ${recordingReady ? "" : "disabled"}>Pause</button>
-          <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="stop" ${recordingReady ? "" : "disabled"}>Stop</button>
-          <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="save" ${recordingReady ? "" : "disabled"}>Save Recording</button>
-        </div>
-      </section>
+          <div class="button-row">
+            <button class="btn btn-primary" data-action="launch-source-site" ${recordingReady ? "" : "disabled"}>Launch Site</button>
+            <button class="btn btn-secondary" data-action="source-recording-action" data-recording-action="start" ${sessionStarted || canStartRecording ? "" : "disabled"}>${startRecordingLabel}</button>
+            ${
+              sessionStarted
+                ? `
+                  <button class="btn btn-soft" data-action="source-recording-action" data-recording-action="pause">Pause</button>
+                  <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="stop">Stop</button>
+                  <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="save" ${recordingSteps.length ? "" : "disabled"}>Save Recording</button>
+                `
+                : ""
+            }
+          </div>
+        </section>
 
       <section class="card-grid two-up">
         <article class="summary-card">
-          <p class="section-label">Capture step</p>
-          <h2>Record the workflow one action at a time</h2>
-          <div class="form-grid">
-            <div class="field field-compact">
-              <label for="builder-action-type">Action type</label>
-              <select id="builder-action-type" ${recordingReady ? "" : "disabled"}>
-                ${builder.actionTypes
-                  .map(
-                    (type) => `
-                      <option value="${escapeAttribute(type)}" ${type === recordingForm.actionType ? "selected" : ""}>${escapeHtml(type)}</option>
-                    `
-                  )
-                  .join("")}
-              </select>
-            </div>
-            <div class="field field-compact">
-              <label for="builder-step-page">Page name</label>
-              <input id="builder-step-page" class="text-input" value="${escapeAttribute(recordingForm.pageName)}" placeholder="Search page" ${recordingReady ? "" : "disabled"} />
-            </div>
-            <div class="field field-wide">
-              <label for="builder-step-target">Target label</label>
-              <input id="builder-step-target" class="text-input" value="${escapeAttribute(recordingForm.targetLabel)}" placeholder="Business Search link" ${recordingReady ? "" : "disabled"} />
-            </div>
-            <div class="field field-wide">
-              <label for="builder-step-selector">Selector hint</label>
-              <input id="builder-step-selector" class="text-input" value="${escapeAttribute(recordingForm.selectorHint)}" placeholder="#search-box or text=Business Search" ${recordingReady ? "" : "disabled"} />
-            </div>
-            <div class="field field-wide">
-              <label for="builder-step-value">Value or sample input</label>
-              <input id="builder-step-value" class="text-input" value="${escapeAttribute(recordingForm.value)}" placeholder="Use Name or Company here" ${recordingReady ? "" : "disabled"} />
-            </div>
-            <div class="field field-wide">
-              <label for="builder-step-notes">Notes</label>
-              <textarea id="builder-step-notes" placeholder="Explain what the admin is doing or what the tool should remember." ${recordingReady ? "" : "disabled"}>${escapeHtml(recordingForm.notes)}</textarea>
-            </div>
-          </div>
-          <div class="button-row">
-            <button class="btn btn-primary" data-action="add-recording-step" ${recordingReady ? "" : "disabled"}>Add Recorded Step</button>
-          </div>
+          ${
+            !sessionStarted
+                ? `
+                  <p class="section-label">Start guided recording</p>
+                  <h2>What is the agenda?</h2>
+                  <p class="muted">
+                    Pick the kind of work first, then press one clear start button. The detailed step capture opens only after the session begins.
+                  </p>
+                <div class="card-grid two-up">
+                  ${builder.agendaTypes
+                    .map(
+                      (agenda) => `
+                        <article class="summary-card agenda-card ${sessionForm.agendaType === agenda.id ? "is-active" : ""}" data-agenda-type="${escapeAttribute(agenda.id)}">
+                          <p class="micro-label">${escapeHtml(agenda.label)}</p>
+                          <p class="muted">${escapeHtml(agenda.description)}</p>
+                        </article>
+                      `
+                    )
+                    .join("")}
+                </div>
+                  <div class="form-grid">
+                    <div class="field field-wide">
+                      <label for="builder-agenda-goal">What should this recording accomplish? (optional)</label>
+                      <textarea id="builder-agenda-goal" placeholder="Example: Search for a business name, open the first result, and capture the profile page.">${escapeHtml(sessionForm.goal)}</textarea>
+                    </div>
+                  <div class="field field-wide">
+                    <label class="checkbox-row">
+                      <input id="builder-capture-screenshots" type="checkbox" ${sessionForm.captureScreenshots ? "checked" : ""} />
+                      <span>Include screenshot checkpoints in this recording</span>
+                    </label>
+                  </div>
+                  </div>
+                  <p class="tiny">
+                    Launch the site if needed, choose one agenda, then press the start button above.
+                  </p>
+                `
+              : `
+                <p class="section-label">Capture what just happened</p>
+                <h2>${activeAgenda ? escapeHtml(activeAgenda.label) : "Guided recording in progress"}</h2>
+                <div class="pill-row">
+                  <div class="pill"><strong>Agenda</strong><span>${escapeHtml(activeAgenda ? activeAgenda.label : "Not set")}</span></div>
+                  <div class="pill"><strong>Goal</strong><span>${escapeHtml(activeDraft.recordingGoal || "No goal added")}</span></div>
+                  <div class="pill"><strong>Screenshots</strong><span>${escapeHtml(activeDraft.captureScreenshots ? "Enabled" : "Off")}</span></div>
+                </div>
+                <div class="quick-action-row">
+                  ${builder.actionTypes
+                    .map(
+                      (type) => `
+                        <button class="btn ${recordingForm.actionType === type ? "btn-primary" : "btn-ghost"}" data-action="pick-recording-action-type" data-action-type="${escapeAttribute(type)}">
+                          ${escapeHtml(type)}
+                        </button>
+                      `
+                    )
+                    .join("")}
+                </div>
+                <div class="form-grid">
+                  <div class="field field-compact">
+                    <label for="builder-action-type">Action type</label>
+                    <select id="builder-action-type">
+                      ${builder.actionTypes
+                        .map(
+                          (type) => `
+                            <option value="${escapeAttribute(type)}" ${type === recordingForm.actionType ? "selected" : ""}>${escapeHtml(type)}</option>
+                          `
+                        )
+                        .join("")}
+                    </select>
+                  </div>
+                  <div class="field field-compact">
+                    <label for="builder-step-page">Page name</label>
+                    <input id="builder-step-page" class="text-input" value="${escapeAttribute(recordingForm.pageName)}" placeholder="Search page" />
+                  </div>
+                  <div class="field field-wide">
+                    <label for="builder-step-target">What did you click, type into, or open?</label>
+                    <input id="builder-step-target" class="text-input" value="${escapeAttribute(recordingForm.targetLabel)}" placeholder="Business Search link" />
+                  </div>
+                  <div class="field field-wide">
+                    <label for="builder-step-selector">Selector hint</label>
+                    <input id="builder-step-selector" class="text-input" value="${escapeAttribute(recordingForm.selectorHint)}" placeholder="#search-box or text=Business Search" />
+                  </div>
+                  <div class="field field-wide">
+                    <label for="builder-step-value">Value or sample input</label>
+                    <input id="builder-step-value" class="text-input" value="${escapeAttribute(recordingForm.value)}" placeholder="Use Name or Company here" />
+                  </div>
+                  <div class="field field-wide">
+                    <label for="builder-step-notes">Notes</label>
+                    <textarea id="builder-step-notes" placeholder="Explain what the admin is doing or what the tool should remember.">${escapeHtml(recordingForm.notes)}</textarea>
+                  </div>
+                </div>
+                <div class="button-row">
+                  <button class="btn btn-primary" data-action="add-recording-step">Add Recorded Step</button>
+                </div>
+              `
+          }
         </article>
 
         <article class="summary-card">
@@ -1278,8 +1374,12 @@ async function updateSourceRecordingAction(action, rerender = true) {
   }
 
   try {
+    const sessionForm = state.data.sourceBuilder.recordingSessionForm;
     const response = await postJson(`/api/source-builder/drafts/${encodeURIComponent(draft.id)}/recording-action`, {
       action,
+      agendaType: sessionForm.agendaType,
+      goal: sessionForm.goal,
+      captureScreenshots: sessionForm.captureScreenshots,
     });
     state.activeSourceDraftId = response.draft.id;
     await fetchBootstrap();
@@ -1411,6 +1511,31 @@ function resetSourceRecordingForm() {
     selectorHint: "",
     value: "",
     notes: "",
+  };
+}
+
+function resetSourceRecordingSessionForm() {
+  state.data.sourceBuilder.recordingSessionForm = {
+    agendaType: "",
+    goal: "",
+    captureScreenshots: false,
+  };
+}
+
+function syncSourceBuilderFormsFromDraft() {
+  const draft = getActiveSourceDraft();
+  if (!state.data) {
+    return;
+  }
+  if (!draft) {
+    resetSourceRecordingSessionForm();
+    return;
+  }
+
+  state.data.sourceBuilder.recordingSessionForm = {
+    agendaType: draft.recordingAgendaType || "",
+    goal: draft.recordingGoal || "",
+    captureScreenshots: Boolean(draft.captureScreenshots),
   };
 }
 
