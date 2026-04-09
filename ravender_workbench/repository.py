@@ -3,7 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from threading import RLock
+
+from ravender_workbench.public_web import investigate_public_website
 
 
 def utc_now() -> str:
@@ -13,17 +17,76 @@ def utc_now() -> str:
 @dataclass
 class WorkbenchRepository:
     engine: object
+    state_path: Path | None = None
 
     def __post_init__(self) -> None:
         self._lock = RLock()
-        self._state = self._build_seed_state()
+        self.state_path = Path(self.state_path) if self.state_path else None
+        self._state = self._load_state()
+
+    def _load_state(self) -> dict:
+        seed = self._build_seed_state()
+        if not self.state_path or not self.state_path.exists():
+            return seed
+
+        try:
+            loaded = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return seed
+
+        if not isinstance(loaded, dict):
+            return seed
+
+        return self._normalize_state(loaded, seed)
+
+    def _normalize_state(self, loaded: dict, seed: dict) -> dict:
+        state = deepcopy(seed)
+
+        for key in ("product", "sources", "packs", "cases", "blueprint"):
+            if isinstance(loaded.get(key), type(seed[key])):
+                state[key] = loaded[key]
+
+        state["product"]["name"] = seed["product"]["name"]
+        state["product"]["version"] = seed["product"]["version"]
+        state["product"]["tagline"] = seed["product"]["tagline"]
+        state["product"]["engine"] = seed["product"]["engine"]
+        state["product"]["hostingMode"] = seed["product"]["hostingMode"]
+
+        loaded_investigator = loaded.get("publicInvestigator", {})
+        investigator = state["publicInvestigator"]
+        if isinstance(loaded_investigator, dict):
+            form = loaded_investigator.get("form", {})
+            if isinstance(form, dict):
+                investigator["form"]["url"] = str(form.get("url") or investigator["form"]["url"])
+                investigator["form"]["query"] = str(form.get("query") or investigator["form"]["query"])
+                investigator["form"]["maxPages"] = int(form.get("maxPages") or investigator["form"]["maxPages"])
+
+            if isinstance(loaded_investigator.get("recentRuns"), list):
+                investigator["recentRuns"] = loaded_investigator["recentRuns"][:8]
+            if isinstance(loaded_investigator.get("runs"), list):
+                investigator["runs"] = loaded_investigator["runs"][:8]
+            if loaded_investigator.get("latestRun"):
+                investigator["latestRun"] = loaded_investigator["latestRun"]
+                if not investigator["runs"]:
+                    investigator["runs"] = [loaded_investigator["latestRun"]]
+
+        return state
+
+    def _persist_state(self) -> None:
+        if not self.state_path:
+            return
+
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
+        temp_path.write_text(json.dumps(self._state, indent=2), encoding="utf-8")
+        temp_path.replace(self.state_path)
 
     def _build_seed_state(self) -> dict:
         return {
             "product": {
                 "name": "Ravender Workbench",
-                "version": "0.1.0",
-                "tagline": "Certified search packs for analysts who should only have to learn the UI.",
+                "version": "0.3.0",
+                "tagline": "Case-first investigations for analysts, plus live public-website research.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
             },
@@ -258,6 +321,46 @@ class WorkbenchRepository:
                     ],
                 },
             ],
+            "publicInvestigator": {
+                "form": {
+                    "url": "https://www.python.org/",
+                    "query": "download, docs, psf",
+                    "maxPages": 6,
+                },
+                "presets": [
+                    {
+                        "label": "Python",
+                        "url": "https://www.python.org/",
+                        "query": "download, docs, psf",
+                    },
+                    {
+                        "label": "Wikipedia",
+                        "url": "https://en.wikipedia.org/wiki/Artificial_intelligence",
+                        "query": "machine learning, research, ethics",
+                    },
+                    {
+                        "label": "Example",
+                        "url": "https://example.com/",
+                        "query": "illustrative domain",
+                    },
+                ],
+                "capabilities": [
+                    "Crawl same-site public HTML pages",
+                    "Follow discovered links and sitemap URLs",
+                    "Extract page titles, descriptions, headings, emails, and phones",
+                    "Match analyst query terms and generate snippets",
+                    "Export investigation output as JSON from the UI",
+                ],
+                "limits": [
+                    "Authenticated portals are out of scope for this mode",
+                    "Heavy JavaScript-only content may be incomplete",
+                    "CAPTCHA and anti-bot protected sites may not be accessible",
+                    "The page cap is intentional for speed and safety",
+                ],
+                "recentRuns": [],
+                "runs": [],
+                "latestRun": None,
+            },
             "blueprint": {
                 "principles": [
                     "Analysts learn the UI, not automation internals.",
@@ -308,6 +411,7 @@ class WorkbenchRepository:
         cases = self._state["cases"]
         packs = self._state["packs"]
         sources = self._state["sources"]
+        public_runs = self._state["publicInvestigator"]["recentRuns"]
         ready_cases = sum(1 for case in cases if case["status"] in {"Ready to run", "Ready for analyst review"})
         published_packs = sum(1 for pack in packs if pack["status"] == "Published")
         certified_sources = sum(1 for source in sources if source["approvalState"] == "Certified")
@@ -315,7 +419,7 @@ class WorkbenchRepository:
             {"label": "Cases ready", "value": str(ready_cases)},
             {"label": "Published packs", "value": str(published_packs)},
             {"label": "Certified sources", "value": str(certified_sources)},
-            {"label": "Audit coverage", "value": "100%"},
+            {"label": "Public runs", "value": str(len(public_runs))},
         ]
 
     def get_bootstrap(self) -> dict:
@@ -338,6 +442,7 @@ class WorkbenchRepository:
             case["recommendedDecision"] = result["recommendedDecision"]
             case["status"] = "Ready for analyst review"
             case["auditTrail"].insert(0, result["auditEvent"])
+            self._persist_state()
 
             return {"ok": True, "case": deepcopy(case), "message": "Certified pack executed."}
 
@@ -355,6 +460,7 @@ class WorkbenchRepository:
                     "message": f"Decision submitted: {decision}.",
                 },
             )
+            self._persist_state()
             return {"ok": True, "case": deepcopy(case), "message": "Decision submitted for reviewer queue."}
 
     def resume_source(self, case_id: str, source_id: str) -> dict:
@@ -378,4 +484,42 @@ class WorkbenchRepository:
                     "message": result.get("message", "Source resumed."),
                 },
             )
+            self._persist_state()
             return {"ok": True, "case": deepcopy(case), "message": result.get("message", "Source resumed.")}
+
+    def run_public_investigation(self, url: str, query: str, max_pages: int) -> dict:
+        with self._lock:
+            investigator = self._state["publicInvestigator"]
+            result = investigate_public_website(url=url, query=query, max_pages=max_pages)
+
+            investigator["form"] = {
+                "url": url,
+                "query": query,
+                "maxPages": max_pages,
+            }
+            investigator["latestRun"] = result
+            investigator["runs"] = [run for run in investigator.get("runs", []) if run.get("id") != result["id"]]
+            investigator["runs"].insert(0, result)
+            investigator["runs"] = investigator["runs"][:8]
+            investigator["recentRuns"].insert(
+                0,
+                {
+                    "id": result["id"],
+                    "domain": result["domain"],
+                    "targetUrl": result["targetUrl"],
+                    "queryTerms": result["queryTerms"],
+                    "pagesCrawled": result["pagesCrawled"],
+                    "matchedPages": result["matchedPages"],
+                    "completedAt": result["completedAt"],
+                    "summary": result["summary"],
+                },
+            )
+            investigator["recentRuns"] = investigator["recentRuns"][:8]
+            self._persist_state()
+
+            return {
+                "ok": True,
+                "investigation": deepcopy(result),
+                "recentRuns": deepcopy(investigator["recentRuns"]),
+                "message": f"Public investigation completed for {result['domain']}.",
+            }

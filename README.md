@@ -1,20 +1,22 @@
 # Ravender Workbench
 
-Case-first compliance search orchestration for non-technical analysts.
+Case-first compliance search orchestration for non-technical analysts, with a live public-website investigation mode.
 
-This repository is the first pilot build for an enterprise-friendly compliance workbench built around a reusable workflow-engine pattern. It is designed to be:
+This repository is a stronger pilot build for an enterprise-friendly compliance workbench built around a reusable workflow-engine pattern. It is designed to be:
 
 - easy for analysts to learn
 - safe to demo on a single machine
+- immediately useful for live public-website investigations
 - ready to evolve into a real Griffin and Cadence search runner
 - structured so we can swap the mock engine for a live workflow service later
 
 ## What is in this first version
 
 - Analyst workbench UI
+- Public Website Investigator for live open-web crawling and term matching
 - Search Pack Studio for admins
 - Governance and rollout views
-- In-memory case queue and evidence model
+- Local JSON-backed state so recent runs survive app restarts on one machine
 - Mock automation engine with a clear live-service adapter seam
 - Zero third-party Python dependencies
 
@@ -27,7 +29,18 @@ python app.py
 
 Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 
+The app stores local pilot state in `runtime_data/workbench_state.json`.
+
 ## Demo actions
+
+1. Open the `Public Website Investigator` tab.
+2. Enter any public website URL, add the terms you want to look for, and choose the page cap.
+3. Click `Run Live Investigation`.
+4. Review matched pages, snippets, contact details, crawl notes, and limitations.
+5. Use the recent-run rail to reopen earlier investigations.
+6. Export the selected investigation as JSON if you want to share or archive it.
+
+You can also test the case workflow:
 
 1. Open the `Analyst Workbench` tab.
 2. Select case `KYC-2026-004218`.
@@ -43,6 +56,7 @@ Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 app.py
 ravender_workbench/
   engine.py
+  public_web.py
   repository.py
 static/
   index.html
@@ -59,10 +73,11 @@ The current engine is intentionally mocked. The integration seam lives in `raven
 
 Planned production path:
 
-1. Replace the mock engine with a live workflow adapter.
-2. Persist cases, packs, evidence, and audit events in enterprise storage.
-3. Add SSO, RBAC, maker-checker approval, and session brokering.
-4. Publish certified Search Packs for Griffin, Cadence, and approved public websites.
+1. Keep expanding the public-website mode with richer extraction, screening packs, and evidence controls.
+2. Replace the mock engine with a live workflow adapter.
+3. Persist cases, packs, evidence, and audit events in enterprise storage.
+4. Add SSO, RBAC, maker-checker approval, and session brokering.
+5. Publish certified Search Packs for Griffin, Cadence, and approved public websites.
 
 ## Repository
 

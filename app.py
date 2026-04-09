@@ -15,11 +15,12 @@ from ravender_workbench.repository import WorkbenchRepository
 
 ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
-REPO = WorkbenchRepository(engine=build_engine())
+DATA_DIR = ROOT_DIR / "runtime_data"
+REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workbench_state.json")
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.1"
+    server_version = "RavenderWorkbench/0.3"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -82,9 +83,21 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self._send_json(REPO.resume_source(case_id, source_id))
                 return
 
+            if path == "/api/public-investigator/run":
+                url = str(payload.get("url", "")).strip()
+                query = str(payload.get("query", "")).strip()
+                max_pages = int(payload.get("maxPages", 6))
+                if not url:
+                    self._send_json({"error": "url is required"}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                self._send_json(REPO.run_public_investigation(url, query, max_pages))
+                return
+
             self._send_json({"error": f"Route not found: {path}"}, status=HTTPStatus.NOT_FOUND)
         except KeyError as error:
             self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+        except ValueError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
 
     def log_message(self, format: str, *args: object) -> None:
         return
