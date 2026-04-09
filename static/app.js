@@ -667,7 +667,7 @@ function renderSourceBuilderView() {
             ${builder.workflow
               .map(
                 (step, index) => `
-                  <article class="summary-card">
+                  <article class="summary-card builder-step-card">
                     <p class="micro-label">Step ${index + 1}</p>
                     <h3>${escapeHtml(step)}</h3>
                     <p class="muted">${index === 0 ? "Live in this slice." : "Planned for the next slices."}</p>

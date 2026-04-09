@@ -285,6 +285,31 @@ body {
   background: linear-gradient(135deg, #0e6f69, #1a9487);
 }
 
+.builder-step-card {
+  color: var(--ink);
+}
+
+.accent-card .builder-step-card {
+  background: rgba(255, 252, 248, 0.98);
+  border: 1px solid rgba(20, 38, 52, 0.08);
+  box-shadow: 0 12px 28px rgba(9, 22, 30, 0.12);
+}
+
+.accent-card .builder-step-card h3,
+.accent-card .builder-step-card strong,
+.accent-card .builder-step-card span {
+  color: var(--ink);
+}
+
+.accent-card .builder-step-card .micro-label {
+  color: var(--brand-deep);
+}
+
+.accent-card .builder-step-card .muted,
+.accent-card .builder-step-card .tiny {
+  color: var(--ink-soft);
+}
+
 .case-card,
 .pack-card {
   cursor: pointer;
