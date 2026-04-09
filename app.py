@@ -20,7 +20,7 @@ REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workben
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.4"
+    server_version = "RavenderWorkbench/0.5"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -101,6 +101,32 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         source_type=str(payload.get("sourceType", "")).strip(),
                         description=str(payload.get("description", "")).strip(),
                         owner=str(payload.get("owner", "")).strip(),
+                    )
+                )
+                return
+
+            recording_action_match = re.fullmatch(r"/api/source-builder/drafts/([^/]+)/recording-action", path)
+            if recording_action_match:
+                draft_id = recording_action_match.group(1)
+                action = str(payload.get("action", "")).strip().lower()
+                if not action:
+                    self._send_json({"error": "action is required"}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                self._send_json(REPO.update_source_recording_action(draft_id, action))
+                return
+
+            recording_step_match = re.fullmatch(r"/api/source-builder/drafts/([^/]+)/steps", path)
+            if recording_step_match:
+                draft_id = recording_step_match.group(1)
+                self._send_json(
+                    REPO.add_source_recording_step(
+                        draft_id,
+                        action_type=str(payload.get("actionType", "")).strip(),
+                        page_name=str(payload.get("pageName", "")).strip(),
+                        target_label=str(payload.get("targetLabel", "")).strip(),
+                        selector_hint=str(payload.get("selectorHint", "")).strip(),
+                        value=str(payload.get("value", "")).strip(),
+                        notes=str(payload.get("notes", "")).strip(),
                     )
                 )
                 return

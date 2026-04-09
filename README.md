@@ -14,7 +14,7 @@ This repository is a stronger pilot build for an enterprise-friendly compliance 
 
 - Analyst workbench UI
 - Website Investigator for live public-website crawling and term matching
-- Source Builder first slice for adding and saving draft website sources
+- Source Builder with draft source definitions and guided recorded-step capture
 - Search Pack Studio for admins
 - Governance and rollout views
 - Local JSON-backed state so recent runs survive app restarts on one machine
@@ -51,12 +51,16 @@ You can also test the case workflow:
 6. If a source shows `Needs assist`, click `Resume Source`.
 7. Add notes and submit a decision.
 
-You can now test the first Source Builder slice:
+You can now test the Source Builder slices:
 
 1. Open the `Source Builder` tab.
 2. Fill `Source name`, `Site URL`, `Source type`, `Owner`, and `Short description`.
 3. Click `Save Draft Source`.
 4. Confirm the draft appears in the left rail and survives a refresh.
+5. Select the draft and click `Launch Site`.
+6. Click `Start Recording`.
+7. Add recorded steps one by one using `Action type`, `Target label`, `Selector hint`, `Value`, and `Notes`.
+8. Click `Pause`, `Stop`, and `Save Recording`.
 
 ## Repo structure
 

@@ -4,6 +4,7 @@ const state = {
   activeCaseId: null,
   activePackId: null,
   activePublicRunId: null,
+  activeSourceDraftId: null,
   toastTimer: null,
   publicRunning: false,
 };
@@ -56,6 +57,14 @@ function bindEvents() {
       return;
     }
 
+    const sourceDraftCard = event.target.closest("[data-source-draft-id]");
+    if (sourceDraftCard) {
+      state.activeSourceDraftId = sourceDraftCard.dataset.sourceDraftId;
+      resetSourceRecordingForm();
+      render();
+      return;
+    }
+
     const action = event.target.closest("[data-action]");
     if (!action) {
       return;
@@ -90,6 +99,21 @@ function bindEvents() {
     if (action.dataset.action === "clear-source-form") {
       resetSourceBuilderForm();
       render();
+      return;
+    }
+
+    if (action.dataset.action === "launch-source-site") {
+      await launchSourceSite();
+      return;
+    }
+
+    if (action.dataset.action === "source-recording-action") {
+      await updateSourceRecordingAction(action.dataset.recordingAction);
+      return;
+    }
+
+    if (action.dataset.action === "add-recording-step") {
+      await addRecordingStep();
       return;
     }
 
@@ -155,6 +179,12 @@ function bindEvents() {
     if (target.id === "builder-source-type") {
       state.data.sourceBuilder.form.sourceType = target.value;
       render();
+      return;
+    }
+
+    if (target.id === "builder-action-type") {
+      state.data.sourceBuilder.recordingForm.actionType = target.value;
+      render();
     }
   });
 
@@ -199,6 +229,31 @@ function bindEvents() {
 
     if (target.id === "builder-owner") {
       state.data.sourceBuilder.form.owner = target.value;
+      return;
+    }
+
+    if (target.id === "builder-step-page") {
+      state.data.sourceBuilder.recordingForm.pageName = target.value;
+      return;
+    }
+
+    if (target.id === "builder-step-target") {
+      state.data.sourceBuilder.recordingForm.targetLabel = target.value;
+      return;
+    }
+
+    if (target.id === "builder-step-selector") {
+      state.data.sourceBuilder.recordingForm.selectorHint = target.value;
+      return;
+    }
+
+    if (target.id === "builder-step-value") {
+      state.data.sourceBuilder.recordingForm.value = target.value;
+      return;
+    }
+
+    if (target.id === "builder-step-notes") {
+      state.data.sourceBuilder.recordingForm.notes = target.value;
     }
   });
 }
@@ -219,6 +274,12 @@ async function fetchBootstrap() {
   const runStillExists = publicRuns.some((run) => run.id === state.activePublicRunId);
   if ((!state.activePublicRunId || !runStillExists) && publicRuns.length > 0) {
     state.activePublicRunId = publicRuns[0].id;
+  }
+
+  const sourceDrafts = state.data.sourceBuilder.drafts || [];
+  const draftStillExists = sourceDrafts.some((draft) => draft.id === state.activeSourceDraftId);
+  if ((!state.activeSourceDraftId || !draftStillExists) && sourceDrafts.length > 0) {
+    state.activeSourceDraftId = sourceDrafts[0].id;
   }
 
   render();
@@ -249,7 +310,7 @@ function renderHero() {
     return;
   }
   if (state.activeTab === "builder") {
-    elements.heroText.textContent = "Source Builder is the admin surface for defining a new website, classifying it, and saving the draft before recording.";
+    elements.heroText.textContent = "Source Builder now supports draft definition plus a guided Record Steps workspace with launch, start, pause, stop, save, and recorded-step capture.";
     return;
   }
   elements.heroText.textContent = state.data.product.tagline;
@@ -382,12 +443,12 @@ function renderSourceBuilderDraftsSidebar() {
           ${drafts
             .map(
               (draft) => `
-                <article class="summary-card sidebar-run-card">
+                <article class="summary-card sidebar-run-card ${draft.id === state.activeSourceDraftId ? "is-active" : ""}" data-source-draft-id="${escapeHtml(draft.id)}">
                   <p class="micro-label">${escapeHtml(draft.sourceType)}</p>
                   <h3>${escapeHtml(draft.name)}</h3>
                   <p class="tiny">${escapeHtml(draft.siteUrl)}</p>
                   <p class="muted">${escapeHtml(draft.description || "No description added yet.")}</p>
-                  <p class="tiny">${escapeHtml(draft.updatedAt)} | ${escapeHtml(draft.status)}</p>
+                  <p class="tiny">${escapeHtml(draft.recordingStatus)} | ${escapeHtml(draft.updatedAt)}</p>
                 </article>
               `
             )
@@ -405,13 +466,13 @@ function renderSourceBuilderScopeSidebar() {
         <ul class="list-clean compact-list">
           <li>Add New Source</li>
           <li>Site URL and source-type classification</li>
-          <li>Local draft save on one machine</li>
+          <li>Launch and guided Record Steps capture</li>
         </ul>
       </div>
       <div class="summary-card">
         <p class="micro-label">Coming next</p>
         <ul class="list-clean compact-list">
-          ${builder.workflow.slice(1).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          ${builder.workflow.slice(2).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>
       </div>
     </div>
@@ -643,6 +704,10 @@ function renderPublicView() {
 function renderSourceBuilderView() {
   const builder = state.data.sourceBuilder;
   const form = builder.form;
+  const activeDraft = getActiveSourceDraft();
+  const recordingForm = builder.recordingForm;
+  const recordingSteps = activeDraft?.steps || [];
+  const recordingReady = Boolean(activeDraft);
 
   return `
     <div class="builder-layout">
@@ -655,7 +720,7 @@ function renderSourceBuilderView() {
           ${renderBadge("Draft only")}
         </div>
         <p class="muted">
-          This is the first Source Builder slice. You can classify a website, save the source definition locally, and prepare for the later recording, testing, and publishing steps.
+          Source Builder now has two live slices. You can classify a website, save the source definition locally, and use the guided recording workspace to capture steps one by one.
         </p>
       </section>
 
@@ -670,7 +735,7 @@ function renderSourceBuilderView() {
                   <article class="summary-card builder-step-card">
                     <p class="micro-label">Step ${index + 1}</p>
                     <h3>${escapeHtml(step)}</h3>
-                    <p class="muted">${index === 0 ? "Live in this slice." : "Planned for the next slices."}</p>
+                    <p class="muted">${index <= 1 ? "Live in this slice." : "Planned for the next slices."}</p>
                   </article>
                 `
               )
@@ -679,7 +744,7 @@ function renderSourceBuilderView() {
         </article>
         <article class="summary-card">
           <p class="section-label">Current limits</p>
-          <h2>What happens after save in this slice</h2>
+          <h2>What is live right now</h2>
           <ul class="list-clean">
             ${builder.notes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
           </ul>
@@ -727,6 +792,110 @@ function renderSourceBuilderView() {
           <button class="btn btn-primary" data-action="save-source-draft">Save Draft Source</button>
           <button class="btn btn-ghost" data-action="clear-source-form">Clear Form</button>
         </div>
+      </section>
+
+      <section class="summary-card">
+        <div class="title-line">
+          <div>
+            <p class="section-label">Step 2</p>
+            <h2>Record Steps</h2>
+          </div>
+          ${activeDraft ? renderBadge(activeDraft.recordingStatus) : renderBadge("Choose draft")}
+        </div>
+        ${
+          activeDraft
+            ? `
+              <div class="pill-row">
+                <div class="pill"><strong>Source</strong><span>${escapeHtml(activeDraft.name)}</span></div>
+                <div class="pill"><strong>Type</strong><span>${escapeHtml(activeDraft.sourceType)}</span></div>
+                <div class="pill"><strong>URL</strong><span>${escapeHtml(activeDraft.siteUrl)}</span></div>
+                <div class="pill"><strong>Steps</strong><span>${escapeHtml(String(recordingSteps.length))}</span></div>
+              </div>
+              <p class="muted">
+                Open the selected source in a separate tab, perform the workflow once, and capture each step here as you go. This is a guided admin recording workspace for this slice, not automatic browser instrumentation yet.
+              </p>
+            `
+            : `<div class="empty-state">Save a draft source first, then select it from the left rail to begin recording steps.</div>`
+        }
+        <div class="button-row">
+          <button class="btn btn-primary" data-action="launch-source-site" ${recordingReady ? "" : "disabled"}>Launch Site</button>
+          <button class="btn btn-secondary" data-action="source-recording-action" data-recording-action="start" ${recordingReady ? "" : "disabled"}>Start Recording</button>
+          <button class="btn btn-soft" data-action="source-recording-action" data-recording-action="pause" ${recordingReady ? "" : "disabled"}>Pause</button>
+          <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="stop" ${recordingReady ? "" : "disabled"}>Stop</button>
+          <button class="btn btn-ghost" data-action="source-recording-action" data-recording-action="save" ${recordingReady ? "" : "disabled"}>Save Recording</button>
+        </div>
+      </section>
+
+      <section class="card-grid two-up">
+        <article class="summary-card">
+          <p class="section-label">Capture step</p>
+          <h2>Record the workflow one action at a time</h2>
+          <div class="form-grid">
+            <div class="field field-compact">
+              <label for="builder-action-type">Action type</label>
+              <select id="builder-action-type" ${recordingReady ? "" : "disabled"}>
+                ${builder.actionTypes
+                  .map(
+                    (type) => `
+                      <option value="${escapeAttribute(type)}" ${type === recordingForm.actionType ? "selected" : ""}>${escapeHtml(type)}</option>
+                    `
+                  )
+                  .join("")}
+              </select>
+            </div>
+            <div class="field field-compact">
+              <label for="builder-step-page">Page name</label>
+              <input id="builder-step-page" class="text-input" value="${escapeAttribute(recordingForm.pageName)}" placeholder="Search page" ${recordingReady ? "" : "disabled"} />
+            </div>
+            <div class="field field-wide">
+              <label for="builder-step-target">Target label</label>
+              <input id="builder-step-target" class="text-input" value="${escapeAttribute(recordingForm.targetLabel)}" placeholder="Business Search link" ${recordingReady ? "" : "disabled"} />
+            </div>
+            <div class="field field-wide">
+              <label for="builder-step-selector">Selector hint</label>
+              <input id="builder-step-selector" class="text-input" value="${escapeAttribute(recordingForm.selectorHint)}" placeholder="#search-box or text=Business Search" ${recordingReady ? "" : "disabled"} />
+            </div>
+            <div class="field field-wide">
+              <label for="builder-step-value">Value or sample input</label>
+              <input id="builder-step-value" class="text-input" value="${escapeAttribute(recordingForm.value)}" placeholder="Use Name or Company here" ${recordingReady ? "" : "disabled"} />
+            </div>
+            <div class="field field-wide">
+              <label for="builder-step-notes">Notes</label>
+              <textarea id="builder-step-notes" placeholder="Explain what the admin is doing or what the tool should remember." ${recordingReady ? "" : "disabled"}>${escapeHtml(recordingForm.notes)}</textarea>
+            </div>
+          </div>
+          <div class="button-row">
+            <button class="btn btn-primary" data-action="add-recording-step" ${recordingReady ? "" : "disabled"}>Add Recorded Step</button>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <p class="section-label">Recorded steps</p>
+          <h2>${activeDraft ? escapeHtml(activeDraft.name) : "No source selected"}</h2>
+          <div class="timeline">
+            ${
+              recordingSteps.length
+                ? recordingSteps
+                    .map(
+                      (step) => `
+                        <article class="timeline-card">
+                          <div class="row-split">
+                            <h3>Step ${escapeHtml(String(step.sequence))}: ${escapeHtml(step.actionType)}</h3>
+                            <span class="tiny">${escapeHtml(step.capturedAt)}</span>
+                          </div>
+                          ${step.pageName ? `<p class="tiny">Page: ${escapeHtml(step.pageName)}</p>` : ""}
+                          ${step.targetLabel ? `<p class="muted">Target: ${escapeHtml(step.targetLabel)}</p>` : ""}
+                          ${step.selectorHint ? `<p class="tiny">Selector hint: ${escapeHtml(step.selectorHint)}</p>` : ""}
+                          ${step.value ? `<p class="tiny">Value: ${escapeHtml(step.value)}</p>` : ""}
+                          ${step.notes ? `<p class="muted">${escapeHtml(step.notes)}</p>` : ""}
+                        </article>
+                      `
+                    )
+                    .join("")
+                : `<div class="empty-state">No steps recorded yet. Launch the source and start capturing actions here.</div>`
+            }
+          </div>
+        </article>
       </section>
     </div>
   `;
@@ -1082,10 +1251,69 @@ async function saveSourceDraft() {
       description: form.description,
       owner: form.owner,
     });
+    state.activeSourceDraftId = response.draft.id;
     await fetchBootstrap();
     showToast(response.message);
   } catch (error) {
     showToast(`Unable to save source draft: ${error.message}`);
+  }
+}
+
+async function launchSourceSite() {
+  const draft = getActiveSourceDraft();
+  if (!draft) {
+    showToast("Select a saved draft first.");
+    return;
+  }
+
+  window.open(draft.siteUrl, "_blank", "noopener,noreferrer");
+  await updateSourceRecordingAction("launch", false);
+}
+
+async function updateSourceRecordingAction(action, rerender = true) {
+  const draft = getActiveSourceDraft();
+  if (!draft) {
+    showToast("Select a saved draft first.");
+    return;
+  }
+
+  try {
+    const response = await postJson(`/api/source-builder/drafts/${encodeURIComponent(draft.id)}/recording-action`, {
+      action,
+    });
+    state.activeSourceDraftId = response.draft.id;
+    await fetchBootstrap();
+    if (rerender) {
+      render();
+    }
+    showToast(response.message);
+  } catch (error) {
+    showToast(`Unable to update recording status: ${error.message}`);
+  }
+}
+
+async function addRecordingStep() {
+  const draft = getActiveSourceDraft();
+  if (!draft) {
+    showToast("Select a saved draft first.");
+    return;
+  }
+
+  try {
+    const form = state.data.sourceBuilder.recordingForm;
+    const response = await postJson(`/api/source-builder/drafts/${encodeURIComponent(draft.id)}/steps`, {
+      actionType: form.actionType,
+      pageName: form.pageName,
+      targetLabel: form.targetLabel,
+      selectorHint: form.selectorHint,
+      value: form.value,
+      notes: form.notes,
+    });
+    state.activeSourceDraftId = response.draft.id;
+    await fetchBootstrap();
+    showToast(response.message);
+  } catch (error) {
+    showToast(`Unable to record step: ${error.message}`);
   }
 }
 
@@ -1154,6 +1382,17 @@ function getActivePublicRun() {
   return runs.find((run) => run.id === state.activePublicRunId) || runs[0];
 }
 
+function getActiveSourceDraft() {
+  if (!state.data) {
+    return null;
+  }
+  const drafts = state.data.sourceBuilder.drafts || [];
+  if (drafts.length === 0) {
+    return null;
+  }
+  return drafts.find((draft) => draft.id === state.activeSourceDraftId) || drafts[0];
+}
+
 function resetSourceBuilderForm() {
   state.data.sourceBuilder.form = {
     name: "",
@@ -1161,6 +1400,17 @@ function resetSourceBuilderForm() {
     sourceType: state.data.sourceBuilder.sourceTypes[0],
     description: "",
     owner: "Compliance Automation",
+  };
+}
+
+function resetSourceRecordingForm() {
+  state.data.sourceBuilder.recordingForm = {
+    actionType: state.data.sourceBuilder.actionTypes[0],
+    pageName: "",
+    targetLabel: "",
+    selectorHint: "",
+    value: "",
+    notes: "",
   };
 }
 
@@ -1215,10 +1465,10 @@ function renderBadge(value) {
 
 function badgeTone(value) {
   const normalized = String(value).toLowerCase();
-  if (["complete", "published", "certified", "high", "profile"].includes(normalized) || normalized.includes("match")) {
+  if (["complete", "published", "certified", "high", "profile", "saved"].includes(normalized) || normalized.includes("match")) {
     return "tone-success";
   }
-  if (["needs assist", "pilot", "needs review", "medium"].includes(normalized)) {
+  if (["needs assist", "pilot", "needs review", "medium", "recording", "paused"].includes(normalized)) {
     return "tone-warn";
   }
   if (["draft", "draft pack only", "low"].includes(normalized)) {

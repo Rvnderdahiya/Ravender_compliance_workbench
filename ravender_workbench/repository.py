@@ -25,6 +25,27 @@ def normalize_source_url(url: str) -> str:
     return cleaned
 
 
+def blank_source_builder_form(owner: str = "Compliance Automation") -> dict:
+    return {
+        "name": "",
+        "siteUrl": "",
+        "sourceType": "Public website",
+        "description": "",
+        "owner": owner,
+    }
+
+
+def blank_recording_form() -> dict:
+    return {
+        "actionType": "Open page",
+        "pageName": "",
+        "targetLabel": "",
+        "selectorHint": "",
+        "value": "",
+        "notes": "",
+    }
+
+
 @dataclass
 class WorkbenchRepository:
     engine: object
@@ -89,10 +110,56 @@ class WorkbenchRepository:
                 for key in ("name", "siteUrl", "sourceType", "description", "owner"):
                     if key in form:
                         builder["form"][key] = str(form.get(key) or builder["form"][key])
+            recording_form = loaded_builder.get("recordingForm", {})
+            if isinstance(recording_form, dict):
+                for key in ("actionType", "pageName", "targetLabel", "selectorHint", "value", "notes"):
+                    if key in recording_form:
+                        builder["recordingForm"][key] = str(recording_form.get(key) or builder["recordingForm"][key])
             if isinstance(loaded_builder.get("drafts"), list):
-                builder["drafts"] = loaded_builder["drafts"][:12]
+                builder["drafts"] = [self._normalize_source_draft(draft) for draft in loaded_builder["drafts"][:12]]
 
         return state
+
+    def _normalize_source_draft(self, draft: dict) -> dict:
+        owner = str(draft.get("owner") or "Compliance Automation")
+        normalized = {
+            "id": str(draft.get("id") or f"source-{int(datetime.now(timezone.utc).timestamp() * 1000)}"),
+            "name": str(draft.get("name") or "").strip(),
+            "siteUrl": normalize_source_url(draft.get("siteUrl") or ""),
+            "sourceType": str(draft.get("sourceType") or "Public website"),
+            "description": str(draft.get("description") or "").strip(),
+            "owner": owner,
+            "status": str(draft.get("status") or "Draft"),
+            "recordingStatus": str(draft.get("recordingStatus") or "Not started"),
+            "testStatus": str(draft.get("testStatus") or "Not run"),
+            "publishStatus": str(draft.get("publishStatus") or "Not published"),
+            "createdAt": str(draft.get("createdAt") or utc_now()),
+            "updatedAt": str(draft.get("updatedAt") or utc_now()),
+            "lastLaunchedAt": str(draft.get("lastLaunchedAt") or ""),
+            "lastRecordingEventAt": str(draft.get("lastRecordingEventAt") or ""),
+            "steps": [],
+        }
+
+        raw_steps = draft.get("steps", [])
+        if isinstance(raw_steps, list):
+            for index, step in enumerate(raw_steps, start=1):
+                if not isinstance(step, dict):
+                    continue
+                normalized["steps"].append(
+                    {
+                        "id": str(step.get("id") or f"{normalized['id']}-step-{index}"),
+                        "sequence": int(step.get("sequence") or index),
+                        "actionType": str(step.get("actionType") or "Open page"),
+                        "pageName": str(step.get("pageName") or "").strip(),
+                        "targetLabel": str(step.get("targetLabel") or "").strip(),
+                        "selectorHint": str(step.get("selectorHint") or "").strip(),
+                        "value": str(step.get("value") or "").strip(),
+                        "notes": str(step.get("notes") or "").strip(),
+                        "capturedAt": str(step.get("capturedAt") or utc_now()),
+                    }
+                )
+
+        return normalized
 
     def _persist_state(self) -> None:
         if not self.state_path:
@@ -107,7 +174,7 @@ class WorkbenchRepository:
         return {
             "product": {
                 "name": "Ravender Workbench",
-                "version": "0.4.0",
+                "version": "0.5.0",
                 "tagline": "Case-first investigations for analysts, with website investigation and source-definition workflows.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
@@ -384,14 +451,10 @@ class WorkbenchRepository:
                 "latestRun": None,
             },
             "sourceBuilder": {
-                "form": {
-                    "name": "",
-                    "siteUrl": "",
-                    "sourceType": "Public website",
-                    "description": "",
-                    "owner": "Compliance Automation",
-                },
+                "form": blank_source_builder_form(),
+                "recordingForm": blank_recording_form(),
                 "sourceTypes": ["Public website", "Login website", "Internal portal"],
+                "actionTypes": ["Open page", "Click", "Type text", "Select option", "Wait", "Open result", "Extract value"],
                 "drafts": [],
                 "workflow": [
                     "Add New Source",
@@ -402,8 +465,9 @@ class WorkbenchRepository:
                     "Publish",
                 ],
                 "notes": [
-                    "This first slice saves source definitions locally as drafts.",
-                    "Recording, input mapping, testing, and publishing will be enabled in the next steps.",
+                    "Source definitions are saved locally as drafts on this machine.",
+                    "Record Steps is now live as a guided admin workspace for capturing flows one step at a time.",
+                    "Automatic browser instrumentation, input mapping, testing, and publishing still come in later slices.",
                 ],
             },
             "blueprint": {
@@ -451,6 +515,12 @@ class WorkbenchRepository:
             if pack["id"] == pack_id:
                 return pack
         raise KeyError(f"Pack not found: {pack_id}")
+
+    def _find_source_draft(self, draft_id: str) -> dict:
+        for draft in self._state["sourceBuilder"]["drafts"]:
+            if draft["id"] == draft_id:
+                return draft
+        raise KeyError(f"Source draft not found: {draft_id}")
 
     def _build_stats(self) -> list[dict]:
         cases = self._state["cases"]
@@ -610,7 +680,8 @@ class WorkbenchRepository:
                 duplicate["updatedAt"] = timestamp
                 draft_record = duplicate
             else:
-                draft_record = {
+                draft_record = self._normalize_source_draft(
+                    {
                     "id": f"source-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
                     "name": cleaned_name,
                     "siteUrl": normalized_url,
@@ -623,21 +694,100 @@ class WorkbenchRepository:
                     "publishStatus": "Not published",
                     "createdAt": timestamp,
                     "updatedAt": timestamp,
-                }
+                    }
+                )
                 builder["drafts"].insert(0, draft_record)
                 builder["drafts"] = builder["drafts"][:12]
 
-            builder["form"] = {
-                "name": "",
-                "siteUrl": "",
-                "sourceType": builder["sourceTypes"][0],
-                "description": "",
-                "owner": cleaned_owner,
-            }
+            builder["form"] = blank_source_builder_form(cleaned_owner)
             self._persist_state()
             return {
                 "ok": True,
                 "draft": deepcopy(draft_record),
                 "sourceBuilder": deepcopy(builder),
                 "message": f'Source draft saved for {cleaned_name}.',
+            }
+
+    def update_source_recording_action(self, draft_id: str, action: str) -> dict:
+        with self._lock:
+            builder = self._state["sourceBuilder"]
+            draft = self._find_source_draft(draft_id)
+            timestamp = utc_now()
+
+            action_map = {
+                "launch": ("Site launched", "Site opened for recording."),
+                "start": ("Recording", "Recording started."),
+                "pause": ("Paused", "Recording paused."),
+                "stop": ("Stopped", "Recording stopped."),
+                "save": ("Saved", "Recording saved as a draft sequence."),
+            }
+            if action not in action_map:
+                raise ValueError("Unsupported recording action.")
+
+            status, message = action_map[action]
+            draft["recordingStatus"] = status
+            draft["updatedAt"] = timestamp
+            draft["lastRecordingEventAt"] = timestamp
+            if action == "launch":
+                draft["lastLaunchedAt"] = timestamp
+
+            self._persist_state()
+            return {
+                "ok": True,
+                "draft": deepcopy(draft),
+                "sourceBuilder": deepcopy(builder),
+                "message": f"{message} {draft['name']}.",
+            }
+
+    def add_source_recording_step(
+        self,
+        draft_id: str,
+        *,
+        action_type: str,
+        page_name: str,
+        target_label: str,
+        selector_hint: str,
+        value: str,
+        notes: str,
+    ) -> dict:
+        with self._lock:
+            builder = self._state["sourceBuilder"]
+            draft = self._find_source_draft(draft_id)
+            cleaned_action_type = str(action_type or "").strip()
+            if cleaned_action_type not in set(builder["actionTypes"]):
+                raise ValueError("A valid action type is required.")
+
+            cleaned_page_name = str(page_name or "").strip()
+            cleaned_target_label = str(target_label or "").strip()
+            cleaned_selector_hint = str(selector_hint or "").strip()
+            cleaned_value = str(value or "").strip()
+            cleaned_notes = str(notes or "").strip()
+            if not cleaned_target_label and not cleaned_selector_hint and not cleaned_value:
+                raise ValueError("Add at least a target label, selector hint, or value.")
+
+            timestamp = utc_now()
+            next_sequence = len(draft["steps"]) + 1
+            step_record = {
+                "id": f"{draft['id']}-step-{next_sequence}",
+                "sequence": next_sequence,
+                "actionType": cleaned_action_type,
+                "pageName": cleaned_page_name,
+                "targetLabel": cleaned_target_label,
+                "selectorHint": cleaned_selector_hint,
+                "value": cleaned_value,
+                "notes": cleaned_notes,
+                "capturedAt": timestamp,
+            }
+            draft["steps"].append(step_record)
+            draft["recordingStatus"] = "Recording" if draft["recordingStatus"] in {"Not started", "Saved"} else draft["recordingStatus"]
+            draft["updatedAt"] = timestamp
+            draft["lastRecordingEventAt"] = timestamp
+            builder["recordingForm"] = blank_recording_form()
+
+            self._persist_state()
+            return {
+                "ok": True,
+                "draft": deepcopy(draft),
+                "sourceBuilder": deepcopy(builder),
+                "message": f"Recorded step {next_sequence} for {draft['name']}.",
             }
