@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ravender Workbench</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Compliance Search Operations</p>
+          <h1>Ravender Workbench</h1>
+          <p class="hero-text">
+            Certified search packs for analysts who should only have to learn the UI.
+          </p>
+        </div>
+        <div class="hero-stats" id="hero-stats"></div>
+      </header>
+
+      <nav class="tab-row" id="tab-row">
+        <button class="tab is-active" data-tab="analyst">Analyst Workbench</button>
+        <button class="tab" data-tab="packs">Search Pack Studio</button>
+        <button class="tab" data-tab="controls">Controls</button>
+        <button class="tab" data-tab="blueprint">Blueprint</button>
+      </nav>
+
+      <div class="toast" id="toast" hidden></div>
+
+      <main class="workspace-grid">
+        <aside class="panel sidebar">
+          <section class="panel-block">
+            <p class="section-label">Queue</p>
+            <div id="case-queue"></div>
+          </section>
+
+          <section class="panel-block panel-block-tight">
+            <p class="section-label">Pilot posture</p>
+            <div id="pilot-posture"></div>
+          </section>
+        </aside>
+
+        <section class="panel main-panel" id="workspace"></section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>
