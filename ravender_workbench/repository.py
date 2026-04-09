@@ -14,6 +14,17 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def normalize_source_url(url: str) -> str:
+    cleaned = str(url or "").strip()
+    if not cleaned:
+        raise ValueError("Site URL is required.")
+    if " " in cleaned:
+        raise ValueError("Site URL cannot contain spaces.")
+    if not cleaned.lower().startswith(("http://", "https://")):
+        cleaned = f"https://{cleaned}"
+    return cleaned
+
+
 @dataclass
 class WorkbenchRepository:
     engine: object
@@ -70,6 +81,17 @@ class WorkbenchRepository:
                 if not investigator["runs"]:
                     investigator["runs"] = [loaded_investigator["latestRun"]]
 
+        loaded_builder = loaded.get("sourceBuilder", {})
+        builder = state["sourceBuilder"]
+        if isinstance(loaded_builder, dict):
+            form = loaded_builder.get("form", {})
+            if isinstance(form, dict):
+                for key in ("name", "siteUrl", "sourceType", "description", "owner"):
+                    if key in form:
+                        builder["form"][key] = str(form.get(key) or builder["form"][key])
+            if isinstance(loaded_builder.get("drafts"), list):
+                builder["drafts"] = loaded_builder["drafts"][:12]
+
         return state
 
     def _persist_state(self) -> None:
@@ -85,8 +107,8 @@ class WorkbenchRepository:
         return {
             "product": {
                 "name": "Ravender Workbench",
-                "version": "0.3.0",
-                "tagline": "Case-first investigations for analysts, plus live public-website research.",
+                "version": "0.4.0",
+                "tagline": "Case-first investigations for analysts, with website investigation and source-definition workflows.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
             },
@@ -361,6 +383,29 @@ class WorkbenchRepository:
                 "runs": [],
                 "latestRun": None,
             },
+            "sourceBuilder": {
+                "form": {
+                    "name": "",
+                    "siteUrl": "",
+                    "sourceType": "Public website",
+                    "description": "",
+                    "owner": "Compliance Automation",
+                },
+                "sourceTypes": ["Public website", "Login website", "Internal portal"],
+                "drafts": [],
+                "workflow": [
+                    "Add New Source",
+                    "Record Steps",
+                    "Map Inputs",
+                    "Define Extraction Rules",
+                    "Test",
+                    "Publish",
+                ],
+                "notes": [
+                    "This first slice saves source definitions locally as drafts.",
+                    "Recording, input mapping, testing, and publishing will be enabled in the next steps.",
+                ],
+            },
             "blueprint": {
                 "principles": [
                     "Analysts learn the UI, not automation internals.",
@@ -412,6 +457,7 @@ class WorkbenchRepository:
         packs = self._state["packs"]
         sources = self._state["sources"]
         public_runs = self._state["publicInvestigator"]["recentRuns"]
+        builder_drafts = self._state["sourceBuilder"]["drafts"]
         ready_cases = sum(1 for case in cases if case["status"] in {"Ready to run", "Ready for analyst review"})
         published_packs = sum(1 for pack in packs if pack["status"] == "Published")
         certified_sources = sum(1 for source in sources if source["approvalState"] == "Certified")
@@ -419,7 +465,8 @@ class WorkbenchRepository:
             {"label": "Cases ready", "value": str(ready_cases)},
             {"label": "Published packs", "value": str(published_packs)},
             {"label": "Certified sources", "value": str(certified_sources)},
-            {"label": "Public runs", "value": str(len(public_runs))},
+            {"label": "Website runs", "value": str(len(public_runs))},
+            {"label": "Draft sources", "value": str(len(builder_drafts))},
         ]
 
     def get_bootstrap(self) -> dict:
@@ -522,4 +569,75 @@ class WorkbenchRepository:
                 "investigation": deepcopy(result),
                 "recentRuns": deepcopy(investigator["recentRuns"]),
                 "message": f"Public investigation completed for {result['domain']}.",
+            }
+
+    def save_source_draft(
+        self,
+        *,
+        name: str,
+        site_url: str,
+        source_type: str,
+        description: str,
+        owner: str,
+    ) -> dict:
+        with self._lock:
+            builder = self._state["sourceBuilder"]
+            allowed_types = set(builder["sourceTypes"])
+            cleaned_name = str(name or "").strip()
+            cleaned_owner = str(owner or "").strip() or "Compliance Automation"
+            cleaned_type = str(source_type or "").strip()
+            cleaned_description = str(description or "").strip()
+            normalized_url = normalize_source_url(site_url)
+
+            if not cleaned_name:
+                raise ValueError("Source name is required.")
+            if cleaned_type not in allowed_types:
+                raise ValueError("A valid source type is required.")
+
+            duplicate = next(
+                (
+                    draft
+                    for draft in builder["drafts"]
+                    if draft["name"].lower() == cleaned_name.lower() and draft["siteUrl"].lower() == normalized_url.lower()
+                ),
+                None,
+            )
+            timestamp = utc_now()
+            if duplicate:
+                duplicate["sourceType"] = cleaned_type
+                duplicate["description"] = cleaned_description
+                duplicate["owner"] = cleaned_owner
+                duplicate["updatedAt"] = timestamp
+                draft_record = duplicate
+            else:
+                draft_record = {
+                    "id": f"source-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+                    "name": cleaned_name,
+                    "siteUrl": normalized_url,
+                    "sourceType": cleaned_type,
+                    "description": cleaned_description,
+                    "owner": cleaned_owner,
+                    "status": "Draft",
+                    "recordingStatus": "Not started",
+                    "testStatus": "Not run",
+                    "publishStatus": "Not published",
+                    "createdAt": timestamp,
+                    "updatedAt": timestamp,
+                }
+                builder["drafts"].insert(0, draft_record)
+                builder["drafts"] = builder["drafts"][:12]
+
+            builder["form"] = {
+                "name": "",
+                "siteUrl": "",
+                "sourceType": builder["sourceTypes"][0],
+                "description": "",
+                "owner": cleaned_owner,
+            }
+            self._persist_state()
+            return {
+                "ok": True,
+                "draft": deepcopy(draft_record),
+                "sourceBuilder": deepcopy(builder),
+                "message": f'Source draft saved for {cleaned_name}.',
             }

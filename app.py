@@ -20,7 +20,7 @@ REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workben
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.3"
+    server_version = "RavenderWorkbench/0.4"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -91,6 +91,18 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "url is required"}, status=HTTPStatus.BAD_REQUEST)
                     return
                 self._send_json(REPO.run_public_investigation(url, query, max_pages))
+                return
+
+            if path == "/api/source-builder/drafts":
+                self._send_json(
+                    REPO.save_source_draft(
+                        name=str(payload.get("name", "")).strip(),
+                        site_url=str(payload.get("siteUrl", "")).strip(),
+                        source_type=str(payload.get("sourceType", "")).strip(),
+                        description=str(payload.get("description", "")).strip(),
+                        owner=str(payload.get("owner", "")).strip(),
+                    )
+                )
                 return
 
             self._send_json({"error": f"Route not found: {path}"}, status=HTTPStatus.NOT_FOUND)

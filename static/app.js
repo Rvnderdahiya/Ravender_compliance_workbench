@@ -82,8 +82,19 @@ function bindEvents() {
       return;
     }
 
+    if (action.dataset.action === "save-source-draft") {
+      await saveSourceDraft();
+      return;
+    }
+
+    if (action.dataset.action === "clear-source-form") {
+      resetSourceBuilderForm();
+      render();
+      return;
+    }
+
     const currentCase = getCurrentCase();
-    if (!currentCase) {
+    if (!currentCase && ["run-pack", "resume-source", "pick-decision", "submit-decision", "download-evidence"].includes(action.dataset.action)) {
       showToast("No case is selected right now.");
       return;
     }
@@ -138,6 +149,12 @@ function bindEvents() {
     if (target.id === "public-max-pages") {
       state.data.publicInvestigator.form.maxPages = Number(target.value);
       render();
+      return;
+    }
+
+    if (target.id === "builder-source-type") {
+      state.data.sourceBuilder.form.sourceType = target.value;
+      render();
     }
   });
 
@@ -162,6 +179,26 @@ function bindEvents() {
 
     if (target.id === "public-query") {
       state.data.publicInvestigator.form.query = target.value;
+      return;
+    }
+
+    if (target.id === "builder-name") {
+      state.data.sourceBuilder.form.name = target.value;
+      return;
+    }
+
+    if (target.id === "builder-site-url") {
+      state.data.sourceBuilder.form.siteUrl = target.value;
+      return;
+    }
+
+    if (target.id === "builder-description") {
+      state.data.sourceBuilder.form.description = target.value;
+      return;
+    }
+
+    if (target.id === "builder-owner") {
+      state.data.sourceBuilder.form.owner = target.value;
     }
   });
 }
@@ -207,10 +244,15 @@ function renderTabs() {
 
 function renderHero() {
   elements.heroTitle.textContent = state.data.product.name;
-  elements.heroText.textContent =
-    state.activeTab === "public"
-      ? "Live public-website research with same-site crawling, matching, extraction, and export."
-      : state.data.product.tagline;
+  if (state.activeTab === "public") {
+    elements.heroText.textContent = "Website investigation for analysts with same-site crawling, matching, extraction, and export for public websites today.";
+    return;
+  }
+  if (state.activeTab === "builder") {
+    elements.heroText.textContent = "Source Builder is the admin surface for defining a new website, classifying it, and saving the draft before recording.";
+    return;
+  }
+  elements.heroText.textContent = state.data.product.tagline;
 }
 
 function renderHeroStats() {
@@ -232,6 +274,14 @@ function renderSidebar() {
     elements.sidebarSecondaryLabel.textContent = "Coverage";
     renderRecentRunsSidebar();
     renderCoverageSidebar();
+    return;
+  }
+
+  if (state.activeTab === "builder") {
+    elements.sidebarPrimaryLabel.textContent = "Draft sources";
+    elements.sidebarSecondaryLabel.textContent = "Builder scope";
+    renderSourceBuilderDraftsSidebar();
+    renderSourceBuilderScopeSidebar();
     return;
   }
 
@@ -276,7 +326,7 @@ function renderPilotPostureSidebar() {
       <div class="summary-card">
         <p class="micro-label">Server time</p>
         <h3>${escapeHtml(serverTime)}</h3>
-        <p class="muted">Case and investigation data reset when the server restarts.</p>
+        <p class="muted">Pilot state persists locally on this machine in the runtime data folder.</p>
       </div>
     </div>
   `;
@@ -301,7 +351,7 @@ function renderRecentRunsSidebar() {
             )
             .join("")}
         </div>`
-      : `<div class="empty-state">Run a public website investigation to build recent history here.</div>`;
+      : `<div class="empty-state">Run a website investigation to build recent history here.</div>`;
 }
 
 function renderCoverageSidebar() {
@@ -324,9 +374,58 @@ function renderCoverageSidebar() {
   `;
 }
 
+function renderSourceBuilderDraftsSidebar() {
+  const drafts = state.data.sourceBuilder.drafts;
+  elements.caseQueue.innerHTML =
+    drafts.length > 0
+      ? `<div class="stack">
+          ${drafts
+            .map(
+              (draft) => `
+                <article class="summary-card sidebar-run-card">
+                  <p class="micro-label">${escapeHtml(draft.sourceType)}</p>
+                  <h3>${escapeHtml(draft.name)}</h3>
+                  <p class="tiny">${escapeHtml(draft.siteUrl)}</p>
+                  <p class="muted">${escapeHtml(draft.description || "No description added yet.")}</p>
+                  <p class="tiny">${escapeHtml(draft.updatedAt)} | ${escapeHtml(draft.status)}</p>
+                </article>
+              `
+            )
+            .join("")}
+        </div>`
+      : `<div class="empty-state">No draft sources yet. Use Add New Source to save the first one.</div>`;
+}
+
+function renderSourceBuilderScopeSidebar() {
+  const builder = state.data.sourceBuilder;
+  elements.pilotPosture.innerHTML = `
+    <div class="stack">
+      <div class="summary-card accent-card accent-emerald">
+        <p class="micro-label">This slice supports</p>
+        <ul class="list-clean compact-list">
+          <li>Add New Source</li>
+          <li>Site URL and source-type classification</li>
+          <li>Local draft save on one machine</li>
+        </ul>
+      </div>
+      <div class="summary-card">
+        <p class="micro-label">Coming next</p>
+        <ul class="list-clean compact-list">
+          ${builder.workflow.slice(1).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
 function renderWorkspace() {
   if (state.activeTab === "public") {
     elements.workspace.innerHTML = renderPublicView();
+    return;
+  }
+
+  if (state.activeTab === "builder") {
+    elements.workspace.innerHTML = renderSourceBuilderView();
     return;
   }
 
@@ -361,7 +460,7 @@ function renderPublicView() {
         <div class="pill"><strong>Duration</strong><span>${escapeHtml(String(activeRun.durationMs))} ms</span></div>
       </div>
     `
-    : `<div class="empty-state">No public website run has been completed yet.</div>`;
+    : `<div class="empty-state">No website investigation has been completed yet.</div>`;
 
   const contactBlock = activeRun
     ? `
@@ -403,7 +502,7 @@ function renderPublicView() {
           `
         )
         .join("")
-    : `<div class="empty-state">Enter a public website, set the terms you care about, and run the investigation.</div>`;
+    : `<div class="empty-state">Enter a website URL, set the terms you care about, and run the investigation.</div>`;
 
   const crawlNotes = activeRun
     ? activeRun.crawlNotes
@@ -426,10 +525,10 @@ function renderPublicView() {
     <div class="public-layout">
       <section class="command-deck">
         <article class="summary-card accent-card accent-dark hero-card">
-          <p class="section-label">Public Website Investigator</p>
+          <p class="section-label">Website Investigator</p>
           <h2>Research any open website from one screen</h2>
           <p class="muted">
-            Crawl a public site, follow same-site links, extract visible text and contact details, and surface direct snippets for the terms that matter to the analyst.
+            Investigate a website URL, follow same-site links, extract visible text and contact details, and surface direct snippets for the terms that matter to the analyst.
           </p>
           <div class="preset-row">
             ${investigator.presets
@@ -481,7 +580,7 @@ function renderPublicView() {
             </button>
           </div>
           <p class="tiny">
-            This mode is built for public HTML websites. It will not fully cover authenticated portals, CAPTCHA flows, or heavy JavaScript-only pages.
+            Execution is live today for public HTML websites. Login websites and internal portals will be defined through Source Builder first and enabled in later steps.
           </p>
         </article>
       </section>
@@ -536,6 +635,98 @@ function renderPublicView() {
             ${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
           </ul>
         </article>
+      </section>
+    </div>
+  `;
+}
+
+function renderSourceBuilderView() {
+  const builder = state.data.sourceBuilder;
+  const form = builder.form;
+
+  return `
+    <div class="builder-layout">
+      <section class="summary-card">
+        <div class="title-line">
+          <div>
+            <p class="section-label">Admin-only builder</p>
+            <h2>Add New Source</h2>
+          </div>
+          ${renderBadge("Draft only")}
+        </div>
+        <p class="muted">
+          This is the first Source Builder slice. You can classify a website, save the source definition locally, and prepare for the later recording, testing, and publishing steps.
+        </p>
+      </section>
+
+      <section class="card-grid two-up">
+        <article class="summary-card accent-card accent-dark">
+          <p class="section-label">Planned builder lifecycle</p>
+          <h2>We are implementing this one step at a time</h2>
+          <div class="card-grid three-up">
+            ${builder.workflow
+              .map(
+                (step, index) => `
+                  <article class="summary-card">
+                    <p class="micro-label">Step ${index + 1}</p>
+                    <h3>${escapeHtml(step)}</h3>
+                    <p class="muted">${index === 0 ? "Live in this slice." : "Planned for the next slices."}</p>
+                  </article>
+                `
+              )
+              .join("")}
+          </div>
+        </article>
+        <article class="summary-card">
+          <p class="section-label">Current limits</p>
+          <h2>What happens after save in this slice</h2>
+          <ul class="list-clean">
+            ${builder.notes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </article>
+      </section>
+
+      <section class="summary-card">
+        <div class="title-line">
+          <div>
+            <p class="section-label">Step 1</p>
+            <h2>Source definition form</h2>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field field-wide">
+            <label for="builder-name">Source name</label>
+            <input id="builder-name" class="text-input" value="${escapeAttribute(form.name)}" placeholder="Texas Business Search" />
+          </div>
+          <div class="field field-wide">
+            <label for="builder-site-url">Site URL</label>
+            <input id="builder-site-url" class="text-input" value="${escapeAttribute(form.siteUrl)}" placeholder="https://..." />
+          </div>
+          <div class="field field-compact">
+            <label for="builder-source-type">Source type</label>
+            <select id="builder-source-type">
+              ${builder.sourceTypes
+                .map(
+                  (type) => `
+                    <option value="${escapeAttribute(type)}" ${type === form.sourceType ? "selected" : ""}>${escapeHtml(type)}</option>
+                  `
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="field field-compact">
+            <label for="builder-owner">Owner</label>
+            <input id="builder-owner" class="text-input" value="${escapeAttribute(form.owner)}" placeholder="Compliance Automation" />
+          </div>
+          <div class="field field-wide">
+            <label for="builder-description">Short description</label>
+            <textarea id="builder-description" placeholder="What will this source be used for?">${escapeHtml(form.description)}</textarea>
+          </div>
+        </div>
+        <div class="button-row">
+          <button class="btn btn-primary" data-action="save-source-draft">Save Draft Source</button>
+          <button class="btn btn-ghost" data-action="clear-source-form">Clear Form</button>
+        </div>
       </section>
     </div>
   `;
@@ -881,6 +1072,23 @@ async function runPublicInvestigator() {
   }
 }
 
+async function saveSourceDraft() {
+  try {
+    const form = state.data.sourceBuilder.form;
+    const response = await postJson("/api/source-builder/drafts", {
+      name: form.name,
+      siteUrl: form.siteUrl,
+      sourceType: form.sourceType,
+      description: form.description,
+      owner: form.owner,
+    });
+    await fetchBootstrap();
+    showToast(response.message);
+  } catch (error) {
+    showToast(`Unable to save source draft: ${error.message}`);
+  }
+}
+
 async function runPack(caseRecord) {
   try {
     const response = await postJson(`/api/cases/${encodeURIComponent(caseRecord.id)}/run-pack`, {
@@ -944,6 +1152,16 @@ function getActivePublicRun() {
     return state.data.publicInvestigator.latestRun || null;
   }
   return runs.find((run) => run.id === state.activePublicRunId) || runs[0];
+}
+
+function resetSourceBuilderForm() {
+  state.data.sourceBuilder.form = {
+    name: "",
+    siteUrl: "",
+    sourceType: state.data.sourceBuilder.sourceTypes[0],
+    description: "",
+    owner: "Compliance Automation",
+  };
 }
 
 function getPack(packId) {

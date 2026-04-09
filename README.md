@@ -1,6 +1,6 @@
 # Ravender Workbench
 
-Case-first compliance search orchestration for non-technical analysts, with a live public-website investigation mode.
+Case-first compliance search orchestration for non-technical analysts, with a Website Investigator for analysts and a Source Builder for admins.
 
 This repository is a stronger pilot build for an enterprise-friendly compliance workbench built around a reusable workflow-engine pattern. It is designed to be:
 
@@ -13,7 +13,8 @@ This repository is a stronger pilot build for an enterprise-friendly compliance 
 ## What is in this first version
 
 - Analyst workbench UI
-- Public Website Investigator for live open-web crawling and term matching
+- Website Investigator for live public-website crawling and term matching
+- Source Builder first slice for adding and saving draft website sources
 - Search Pack Studio for admins
 - Governance and rollout views
 - Local JSON-backed state so recent runs survive app restarts on one machine
@@ -33,7 +34,7 @@ The app stores local pilot state in `runtime_data/workbench_state.json`.
 
 ## Demo actions
 
-1. Open the `Public Website Investigator` tab.
+1. Open the `Website Investigator` tab.
 2. Enter any public website URL, add the terms you want to look for, and choose the page cap.
 3. Click `Run Live Investigation`.
 4. Review matched pages, snippets, contact details, crawl notes, and limitations.
@@ -49,6 +50,13 @@ You can also test the case workflow:
 5. Review evidence.
 6. If a source shows `Needs assist`, click `Resume Source`.
 7. Add notes and submit a decision.
+
+You can now test the first Source Builder slice:
+
+1. Open the `Source Builder` tab.
+2. Fill `Source name`, `Site URL`, `Source type`, `Owner`, and `Short description`.
+3. Click `Save Draft Source`.
+4. Confirm the draft appears in the left rail and survives a refresh.
 
 ## Repo structure
 
