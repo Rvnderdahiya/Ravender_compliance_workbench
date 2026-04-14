@@ -26,8 +26,10 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 - Run Search action from queue:
   - scans Google pages 1-3
   - uses fallback HTML search endpoint if Google results are restricted
+  - captures PDF and screenshot for search pages
   - filters blocked and non-approved domains
   - evaluates approved candidate pages for match strength
+  - captures top approved result pages for manual review evidence
   - flags photo presence when page images exist
   - saves `run_summary.json` and `run_summary.txt`
   - attempts PDF/screenshot capture using local headless browser (if available)

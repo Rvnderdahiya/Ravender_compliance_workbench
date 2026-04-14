@@ -36,6 +36,12 @@ def normalize_space(value: str) -> str:
     return re.sub(r"\s+", " ", value or "").strip()
 
 
+def normalize_for_match(value: str) -> str:
+    lowered = normalize_space(value).lower()
+    lowered = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return normalize_space(lowered)
+
+
 def parse_detail_terms(value: str) -> list[str]:
     terms: list[str] = []
     seen = set()
@@ -262,9 +268,15 @@ def run_v1_search_job(
 
     query = normalize_space(f"{subject_name} {subject_details}")
     detail_terms = parse_detail_terms(subject_details)
+    normalized_subject = normalize_for_match(subject_name)
+    normalized_detail_terms = [(term, normalize_for_match(term)) for term in detail_terms]
 
     all_results: list[ParsedResult] = []
     warnings: list[str] = []
+    browser = find_headless_browser()
+    capture_notes: list[str] = []
+    search_page_pdf_captured = 0
+    search_page_screenshots_captured = 0
 
     for page in range(1, google_pages + 1):
         start = (page - 1) * 10
@@ -272,6 +284,16 @@ def run_v1_search_job(
         try:
             html = fetch_text(url)
             (raw_dir / f"google_page_{page}.html").write_text(html, encoding="utf-8")
+            if browser:
+                pdf_path = pdf_dir / f"search_google_page_{page:02d}.pdf"
+                screenshot_path = screenshot_dir / f"search_google_page_{page:02d}.png"
+                pdf_ok, screenshot_ok, note = run_headless_capture(browser, url, pdf_path, screenshot_path)
+                if pdf_ok:
+                    search_page_pdf_captured += 1
+                if screenshot_ok:
+                    search_page_screenshots_captured += 1
+                if note:
+                    capture_notes.append(note)
             parsed = parse_google_result_links(html, page, approved_domains, blocked_domains)
             all_results.extend(parsed)
         except Exception as error:
@@ -285,6 +307,16 @@ def run_v1_search_job(
             try:
                 html = fetch_text(fallback_url)
                 (raw_dir / f"fallback_page_{page}.html").write_text(html, encoding="utf-8")
+                if browser:
+                    pdf_path = pdf_dir / f"search_fallback_page_{page:02d}.pdf"
+                    screenshot_path = screenshot_dir / f"search_fallback_page_{page:02d}.png"
+                    pdf_ok, screenshot_ok, note = run_headless_capture(browser, fallback_url, pdf_path, screenshot_path)
+                    if pdf_ok:
+                        search_page_pdf_captured += 1
+                    if screenshot_ok:
+                        search_page_screenshots_captured += 1
+                    if note:
+                        capture_notes.append(note)
                 parsed = parse_duckduckgo_result_links(html, page, approved_domains, blocked_domains)
                 all_results.extend(parsed)
             except Exception as error:
@@ -304,8 +336,6 @@ def run_v1_search_job(
     not_approved_skips = [item for item in deduped if not item.approved and not item.blocked]
 
     evaluated = []
-    browser = find_headless_browser()
-    capture_notes: list[str] = []
 
     for index, candidate in enumerate(approved_candidates[:10], start=1):
         page_text = ""
@@ -318,11 +348,12 @@ def run_v1_search_job(
         except Exception as error:
             page_error = str(error)
 
-        name_match = subject_name.lower() in page_text if page_text else False
-        matched_detail_terms = [term for term in detail_terms if term.lower() in page_text]
+        normalized_blob = normalize_for_match(f"{page_text} {candidate.title} {candidate.url}")
+        name_match = normalized_subject in normalized_blob if normalized_subject else False
+        matched_detail_terms = [term for term, normalized in normalized_detail_terms if normalized and normalized in normalized_blob]
         has_photo = "<img" in html.lower() if html else False
 
-        if name_match and matched_detail_terms:
+        if name_match and (matched_detail_terms or not detail_terms):
             match_strength = "Strong"
         elif name_match:
             match_strength = "Possible"
@@ -337,7 +368,7 @@ def run_v1_search_job(
             "captureNote": "",
         }
 
-        should_capture = match_strength in {"Strong", "Possible"}
+        should_capture = index <= 5 or match_strength in {"Strong", "Possible"}
         if should_capture and browser:
             pdf_path = pdf_dir / f"{index:02d}_{candidate.domain}.pdf"
             screenshot_path = screenshot_dir / f"{index:02d}_{candidate.domain}.png"
@@ -381,6 +412,8 @@ def run_v1_search_job(
         "query": query,
         "searchPath": "Google + fallback" if used_fallback else "Google",
         "googlePagesRequested": google_pages,
+        "searchPagePdfCaptured": search_page_pdf_captured,
+        "searchPageScreenshotsCaptured": search_page_screenshots_captured,
         "googleResultsFound": len(deduped),
         "approvedCandidates": len(approved_candidates),
         "blockedSkipped": len(blocked_skips),
@@ -404,6 +437,8 @@ def run_v1_search_job(
             f"Query: {query}\n"
             f"Search path: {'Google + fallback' if used_fallback else 'Google'}\n"
             f"Google pages requested: {google_pages}\n"
+            f"Search pages PDF captured: {search_page_pdf_captured}\n"
+            f"Search pages screenshots captured: {search_page_screenshots_captured}\n"
             f"Total results seen: {len(deduped)}\n"
             f"Approved candidates: {len(approved_candidates)}\n"
             f"Blocked skipped: {len(blocked_skips)}\n"

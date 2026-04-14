@@ -150,6 +150,7 @@ function renderRunSummary(summary) {
   return `
     <div class="run-summary">
       <p><strong>Search path:</strong> ${escapeHtml(summary.searchPath || "Google")}</p>
+      <p><strong>Search pages PDF:</strong> ${escapeHtml(String(summary.searchPagePdfCaptured ?? 0))} | <strong>Search pages screenshots:</strong> ${escapeHtml(String(summary.searchPageScreenshotsCaptured ?? 0))}</p>
       <p><strong>Results seen:</strong> ${escapeHtml(String(summary.googleResultsFound ?? 0))}</p>
       <p><strong>Approved candidates:</strong> ${escapeHtml(String(summary.approvedCandidates ?? 0))}</p>
       <p><strong>Strong matches:</strong> ${escapeHtml(String(summary.strongMatches ?? 0))} | <strong>Possible:</strong> ${escapeHtml(String(summary.possibleMatches ?? 0))}</p>
