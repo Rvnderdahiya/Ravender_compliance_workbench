@@ -25,12 +25,13 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 - Automatic creation of a request folder on local machine
 - Run Search action from queue:
   - scans Google pages 1-3
-  - uses fallback HTML search endpoint if Google results are restricted
+  - uses Bing RSS fallback (and then DuckDuckGo HTML fallback only if needed)
   - filters blocked and non-approved domains
   - evaluates approved candidate pages for match strength
-  - generates a clean result digest (`result_digest.html`, PDF, screenshot)
-  - captures top approved result pages for manual review evidence when possible
+  - saves PDFs/screenshots only for successful matches (no generic search-page digest capture)
+  - captures up to first 5 successful pages per run for predictable runtime
   - flags photo presence when page images exist
+  - writes `notes/pdf_index.txt` and `notes/pdf_index.csv` that map each saved PDF to URL, title, and match reason
   - saves `run_summary.json` and `run_summary.txt`
   - attempts PDF/screenshot capture using local headless browser (if available)
   - shows run metrics on each queue card

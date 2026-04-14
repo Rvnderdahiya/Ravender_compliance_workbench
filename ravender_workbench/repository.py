@@ -1055,10 +1055,21 @@ class WorkbenchRepository:
             raise ValueError("Request folder does not exist on disk.")
 
         groups = [
-            ("summary", "Summary", ["request.json", "notes/run_summary.json", "notes/run_summary.txt", "notes/summary.txt"]),
+            (
+                "summary",
+                "Summary",
+                [
+                    "request.json",
+                    "notes/run_summary.json",
+                    "notes/run_summary.txt",
+                    "notes/pdf_index.txt",
+                    "notes/pdf_index.csv",
+                    "notes/summary.txt",
+                ],
+            ),
             ("pdf", "PDF Evidence", ["pdf/*.pdf"]),
             ("screenshots", "Screenshot Evidence", ["screenshots/*.png", "screenshots/*.jpg", "screenshots/*.jpeg", "screenshots/*.webp"]),
-            ("debug", "Debug Search Files", ["search_raw/*.html"]),
+            ("debug", "Debug Search Files", ["search_raw/*.html", "search_raw/*.xml"]),
         ]
 
         artifacts = {}

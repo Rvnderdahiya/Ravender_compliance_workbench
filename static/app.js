@@ -164,15 +164,19 @@ function renderRunSummary(summary) {
   if (summary.error) {
     return `<p class="run-note"><strong>Execution:</strong> Failed - ${escapeHtml(summary.error)}</p>`;
   }
+  const warnings = Array.isArray(summary.warnings) && summary.warnings.length > 0
+    ? `<p><strong>Warnings:</strong> ${escapeHtml(summary.warnings.join(" | "))}</p>`
+    : "";
   return `
     <div class="run-summary">
       <p><strong>Search path:</strong> ${escapeHtml(summary.searchPath || "Google")}</p>
-      <p><strong>Digest PDF:</strong> ${escapeHtml(String(summary.digestPdfCaptured ?? 0))} | <strong>Digest screenshot:</strong> ${escapeHtml(String(summary.digestScreenshotCaptured ?? 0))}</p>
       <p><strong>Results seen:</strong> ${escapeHtml(String(summary.googleResultsFound ?? 0))}</p>
       <p><strong>Approved candidates:</strong> ${escapeHtml(String(summary.approvedCandidates ?? 0))}</p>
       <p><strong>Strong matches:</strong> ${escapeHtml(String(summary.strongMatches ?? 0))} | <strong>Possible:</strong> ${escapeHtml(String(summary.possibleMatches ?? 0))}</p>
+      <p><strong>Successful matches:</strong> ${escapeHtml(String(summary.successfulMatches ?? 0))}</p>
       <p><strong>Blocked skipped:</strong> ${escapeHtml(String(summary.blockedSkipped ?? 0))}</p>
-      <p><strong>PDF captured:</strong> ${escapeHtml(String(summary.pdfCaptured ?? 0))} | <strong>Screenshots:</strong> ${escapeHtml(String(summary.screenshotsCaptured ?? 0))}</p>
+      <p><strong>Saved PDFs:</strong> ${escapeHtml(String(summary.savedPdfCount ?? 0))} | <strong>Screenshots:</strong> ${escapeHtml(String(summary.savedScreenshotCount ?? 0))}</p>
+      ${warnings}
     </div>
   `;
 }
