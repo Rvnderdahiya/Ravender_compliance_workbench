@@ -3,6 +3,7 @@ const state = {
   toastTimer: null,
   creating: false,
   domainSaving: false,
+  runningJobId: "",
 };
 
 const elements = {
@@ -58,6 +59,12 @@ function bindEvents() {
   });
 
   document.addEventListener("click", async (event) => {
+    const runButton = event.target.closest("[data-action='run-job']");
+    if (runButton) {
+      await runSearchRequest(runButton.dataset.jobId);
+      return;
+    }
+
     const removeButton = event.target.closest("[data-action='remove-domain']");
     if (!removeButton) {
       return;
@@ -114,11 +121,42 @@ function render() {
           <p><strong>Type:</strong> ${escapeHtml(job.subjectType)} | <strong>Google depth:</strong> Page ${escapeHtml(String(job.googlePages))}</p>
           <p><strong>Photo check:</strong> ${job.photoCheckRequired ? "Yes" : "No"}</p>
           <p><strong>Created:</strong> ${escapeHtml(job.createdAt)}</p>
+          ${job.lastRunAt ? `<p><strong>Last run:</strong> ${escapeHtml(job.lastRunAt)}</p>` : ""}
+          ${renderRunSummary(job.lastRunSummary)}
           <p><strong>Folder:</strong> ${escapeHtml(job.folderPath)}</p>
+          <div class="button-row">
+            <button
+              class="btn-outline"
+              data-action="run-job"
+              data-job-id="${escapeHtml(job.id)}"
+              ${state.runningJobId === job.id ? "disabled" : ""}
+            >
+              ${state.runningJobId === job.id ? "Running..." : "Run Search"}
+            </button>
+          </div>
         </article>
       `
     )
     .join("");
+}
+
+function renderRunSummary(summary) {
+  if (!summary || Object.keys(summary).length === 0) {
+    return `<p class="run-note"><strong>Execution:</strong> Not run yet.</p>`;
+  }
+  if (summary.error) {
+    return `<p class="run-note"><strong>Execution:</strong> Failed - ${escapeHtml(summary.error)}</p>`;
+  }
+  return `
+    <div class="run-summary">
+      <p><strong>Search path:</strong> ${escapeHtml(summary.searchPath || "Google")}</p>
+      <p><strong>Results seen:</strong> ${escapeHtml(String(summary.googleResultsFound ?? 0))}</p>
+      <p><strong>Approved candidates:</strong> ${escapeHtml(String(summary.approvedCandidates ?? 0))}</p>
+      <p><strong>Strong matches:</strong> ${escapeHtml(String(summary.strongMatches ?? 0))} | <strong>Possible:</strong> ${escapeHtml(String(summary.possibleMatches ?? 0))}</p>
+      <p><strong>Blocked skipped:</strong> ${escapeHtml(String(summary.blockedSkipped ?? 0))}</p>
+      <p><strong>PDF captured:</strong> ${escapeHtml(String(summary.pdfCaptured ?? 0))} | <strong>Screenshots:</strong> ${escapeHtml(String(summary.screenshotsCaptured ?? 0))}</p>
+    </div>
+  `;
 }
 
 function renderDomainList(domains, listType) {
@@ -220,6 +258,25 @@ async function removeDomainRule(listType, domainValue) {
     showToast(`Unable to remove domain: ${error.message}`);
   } finally {
     state.domainSaving = false;
+    render();
+  }
+}
+
+async function runSearchRequest(jobId) {
+  if (!jobId) {
+    return;
+  }
+  try {
+    state.runningJobId = jobId;
+    render();
+    const response = await postJson(`/api/v1/search-requests/${encodeURIComponent(jobId)}/run`, {});
+    state.data.v1Simple = response.v1Simple;
+    showToast(response.message);
+    render();
+  } catch (error) {
+    showToast(`Unable to run search: ${error.message}`);
+  } finally {
+    state.runningJobId = "";
     render();
   }
 }

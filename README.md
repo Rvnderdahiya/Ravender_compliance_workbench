@@ -15,7 +15,7 @@ python app.py
 
 Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 
-## Step 1 scope (current)
+## Current scope
 
 - Single-screen UI only
 - Request intake for `Person` or `Company`
@@ -23,6 +23,15 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 - Optional photo-check flag
 - Approved-domain and blocked-domain lists are editable in UI
 - Automatic creation of a request folder on local machine
+- Run Search action from queue:
+  - scans Google pages 1-3
+  - uses fallback HTML search endpoint if Google results are restricted
+  - filters blocked and non-approved domains
+  - evaluates approved candidate pages for match strength
+  - flags photo presence when page images exist
+  - saves `run_summary.json` and `run_summary.txt`
+  - attempts PDF/screenshot capture using local headless browser (if available)
+  - shows run metrics on each queue card
 
 Each request folder includes:
 
@@ -38,10 +47,8 @@ Each request folder includes:
 
 ## Next step
 
-Step 2 will execute the search workflow itself:
+Step 3 will improve execution quality and analyst controls:
 
-- run Google query
-- scan up to selected page depth
-- filter blocked domains
-- open valid matches
-- save screenshots/PDF evidence into each request folder
+- stronger exact-match rules for person/company details
+- configurable approved-domain profiles by use case
+- clearer per-result action panel (open link, open artifact, mark manual photo review)

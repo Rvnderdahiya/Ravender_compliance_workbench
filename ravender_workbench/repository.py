@@ -9,6 +9,7 @@ import re
 from threading import RLock
 
 from ravender_workbench.public_web import investigate_public_website
+from ravender_workbench.v1_search import run_v1_search_job
 
 
 def utc_now() -> str:
@@ -137,6 +138,9 @@ class WorkbenchRepository:
         approved_source = job.get("approvedDomains")
         if not isinstance(approved_source, list):
             approved_source = job.get("allowedDomainHints") if isinstance(job.get("allowedDomainHints"), list) else []
+        summary = job.get("lastRunSummary")
+        if not isinstance(summary, dict):
+            summary = {}
         return {
             "id": str(job.get("id") or f"v1-{int(datetime.now(timezone.utc).timestamp() * 1000)}"),
             "createdAt": str(job.get("createdAt") or utc_now()),
@@ -151,6 +155,8 @@ class WorkbenchRepository:
             "blockedDomains": self._safe_domain_list(job.get("blockedDomains") or []),
             "requestFilePath": str(job.get("requestFilePath") or ""),
             "summaryFilePath": str(job.get("summaryFilePath") or ""),
+            "lastRunAt": str(job.get("lastRunAt") or ""),
+            "lastRunSummary": summary,
         }
 
     def _load_state(self) -> dict:
@@ -262,6 +268,20 @@ class WorkbenchRepository:
                         continue
                     normalized_jobs.append(normalized_job)
                 v1["jobs"] = normalized_jobs
+
+            migrated_jobs = []
+            for job in v1["jobs"]:
+                migrated = dict(job)
+                if not migrated.get("approvedDomains"):
+                    migrated["approvedDomains"] = list(v1["approvedDomains"])
+                if not migrated.get("blockedDomains"):
+                    migrated["blockedDomains"] = list(v1["blockedDomains"])
+                migrated["approvedDomains"] = self._safe_domain_list(migrated["approvedDomains"], limit=40)
+                migrated["blockedDomains"] = self._safe_domain_list(migrated["blockedDomains"], limit=40)
+                migrated.setdefault("lastRunAt", "")
+                migrated.setdefault("lastRunSummary", {})
+                migrated_jobs.append(migrated)
+            v1["jobs"] = migrated_jobs
 
         return state
 
@@ -722,6 +742,12 @@ class WorkbenchRepository:
                 return draft
         raise KeyError(f"Source draft not found: {draft_id}")
 
+    def _find_v1_job(self, job_id: str) -> dict:
+        for job in self._state["v1Simple"]["jobs"]:
+            if job["id"] == job_id:
+                return job
+        raise KeyError(f"Search request not found: {job_id}")
+
     def _build_stats(self) -> list[dict]:
         cases = self._state["cases"]
         packs = self._state["packs"]
@@ -888,6 +914,8 @@ class WorkbenchRepository:
                 "blockedDomains": list(v1["blockedDomains"]),
                 "status": "Request created",
                 "folderPath": str(request_folder.resolve()),
+                "lastRunAt": "",
+                "lastRunSummary": {},
             }
 
             request_file = request_folder / "request.json"
@@ -963,6 +991,49 @@ class WorkbenchRepository:
                 "ok": True,
                 "v1Simple": deepcopy(v1),
                 "message": message,
+            }
+
+    def run_v1_search_request(self, job_id: str) -> dict:
+        with self._lock:
+            job = self._find_v1_job(job_id)
+            job["status"] = "Running"
+            self._persist_state()
+
+        try:
+            summary = run_v1_search_job(
+                subject_name=job["subjectName"],
+                subject_details=job["subjectDetails"],
+                google_pages=job["googlePages"],
+                photo_check_required=bool(job["photoCheckRequired"]),
+                approved_domains=list(job.get("approvedDomains") or self._state["v1Simple"]["approvedDomains"]),
+                blocked_domains=list(job.get("blockedDomains") or self._state["v1Simple"]["blockedDomains"]),
+                request_folder=Path(job["folderPath"]),
+            )
+        except Exception as error:
+            with self._lock:
+                current_job = self._find_v1_job(job_id)
+                current_job["status"] = "Execution failed"
+                current_job["lastRunAt"] = utc_now()
+                current_job["lastRunSummary"] = {"error": str(error)}
+                self._persist_state()
+                return {
+                    "ok": False,
+                    "job": deepcopy(current_job),
+                    "v1Simple": deepcopy(self._state["v1Simple"]),
+                    "message": f"Search execution failed: {error}",
+                }
+
+        with self._lock:
+            current_job = self._find_v1_job(job_id)
+            current_job["status"] = "Execution complete"
+            current_job["lastRunAt"] = utc_now()
+            current_job["lastRunSummary"] = summary
+            self._persist_state()
+            return {
+                "ok": True,
+                "job": deepcopy(current_job),
+                "v1Simple": deepcopy(self._state["v1Simple"]),
+                "message": f"Search execution completed for {current_job['subjectName']}.",
             }
 
     def save_source_draft(

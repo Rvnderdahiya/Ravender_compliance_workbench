@@ -282,6 +282,23 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.run-note {
+  margin-top: 10px;
+  color: var(--ink-soft);
+}
+
+.run-summary {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(10, 104, 112, 0.2);
+  background: rgba(10, 104, 112, 0.07);
+}
+
+.run-summary p {
+  margin: 5px 0 0;
+}
+
 .empty-state {
   padding: 14px;
   border: 1px dashed var(--line);

@@ -115,6 +115,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            run_v1_match = re.fullmatch(r"/api/v1/search-requests/([^/]+)/run", path)
+            if run_v1_match:
+                job_id = run_v1_match.group(1)
+                self._send_json(REPO.run_v1_search_request(job_id))
+                return
+
             if path == "/api/source-builder/drafts":
                 self._send_json(
                     REPO.save_source_draft(
