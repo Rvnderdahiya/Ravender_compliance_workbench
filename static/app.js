@@ -90,9 +90,6 @@ async function createRequest() {
   }
 
   try {
-    state.creating = true;
-    render();
-
     const payload = {
       subjectType: elements.subjectType.value,
       subjectName: elements.subjectName.value,
@@ -100,6 +97,9 @@ async function createRequest() {
       googlePages: Number(elements.googlePages.value),
       photoCheckRequired: elements.photoCheckRequired.checked,
     };
+
+    state.creating = true;
+    render();
 
     const response = await postJson("/api/v1/search-requests", payload);
     state.data.v1Simple = response.v1Simple;
