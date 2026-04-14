@@ -1,4 +1,4 @@
-# Ravender Workbench
+# AMEX Compliance Evidence Desk
 
 Version 1 is now intentionally simplified to one workflow:
 
@@ -9,7 +9,7 @@ Version 1 is now intentionally simplified to one workflow:
 ## Run
 
 ```powershell
-cd C:\Users\QSS\Documents\Ravender\Web_tool
+cd <repo-folder>
 python app.py
 ```
 
@@ -21,7 +21,7 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
 - Request intake for `Person` or `Company`
 - Google depth selection (`1`, `2`, or `3` pages)
 - Optional photo-check flag
-- Approved-domain hints and blocked-domain list shown in UI
+- Approved-domain and blocked-domain lists are editable in UI
 - Automatic creation of a request folder on local machine
 
 Each request folder includes:
@@ -33,7 +33,7 @@ Each request folder includes:
 ## Local folders
 
 - App state: `runtime_data/workbench_state.json`
-- V1 request workspace: `runtime_data/v1_simple_task_workspace`
+- V1 request workspace: `C:\Users\<you>\Documents\AMEX_Compliance_Evidence_Desk_V1\requests`
 - Archived previous UI: `archive/v0_6_multitab_ui/static`
 
 ## Next step

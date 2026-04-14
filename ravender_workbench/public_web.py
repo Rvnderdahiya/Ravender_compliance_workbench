@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
 
-USER_AGENT = "RavenderWorkbench-PublicInvestigator/0.2"
+USER_AGENT = "AMEX-Compliance-Evidence-Desk/1.0"
 MAX_FETCH_BYTES = 1_500_000
 MAX_DISCOVERED_LINKS_PER_PAGE = 40
 MAX_SITEMAPS = 2

@@ -1,1 +1,1 @@
-"""Ravender Workbench package."""
+"""AMEX Compliance Evidence Desk package."""

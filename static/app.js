@@ -2,6 +2,7 @@ const state = {
   data: null,
   toastTimer: null,
   creating: false,
+  domainSaving: false,
 };
 
 const elements = {
@@ -14,8 +15,12 @@ const elements = {
   photoCheckRequired: document.getElementById("photo-check-required"),
   createRequestButton: document.getElementById("create-request"),
   workspacePath: document.getElementById("workspace-path"),
-  allowedDomains: document.getElementById("allowed-domains"),
+  approvedDomains: document.getElementById("approved-domains"),
   blockedDomains: document.getElementById("blocked-domains"),
+  approvedDomainInput: document.getElementById("approved-domain-input"),
+  blockedDomainInput: document.getElementById("blocked-domain-input"),
+  addApprovedDomainButton: document.getElementById("add-approved-domain"),
+  addBlockedDomainButton: document.getElementById("add-blocked-domain"),
   jobsList: document.getElementById("jobs-list"),
   toast: document.getElementById("toast"),
 };
@@ -28,6 +33,36 @@ document.addEventListener("DOMContentLoaded", () => {
 function bindEvents() {
   elements.createRequestButton.addEventListener("click", async () => {
     await createRequest();
+  });
+
+  elements.addApprovedDomainButton.addEventListener("click", async () => {
+    await addDomainRule("approved", elements.approvedDomainInput.value);
+  });
+
+  elements.addBlockedDomainButton.addEventListener("click", async () => {
+    await addDomainRule("blocked", elements.blockedDomainInput.value);
+  });
+
+  elements.approvedDomainInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await addDomainRule("approved", elements.approvedDomainInput.value);
+    }
+  });
+
+  elements.blockedDomainInput.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await addDomainRule("blocked", elements.blockedDomainInput.value);
+    }
+  });
+
+  document.addEventListener("click", async (event) => {
+    const removeButton = event.target.closest("[data-action='remove-domain']");
+    if (!removeButton) {
+      return;
+    }
+    await removeDomainRule(removeButton.dataset.listType, removeButton.dataset.domain);
   });
 }
 
@@ -45,8 +80,8 @@ function render() {
   const v1 = state.data.v1Simple;
   const form = v1.form;
 
-  elements.heroTitle.textContent = `${state.data.product.name} - ${v1.workflowName}`;
-  elements.heroCopy.textContent = state.data.product.tagline;
+  elements.heroTitle.textContent = state.data.product.name;
+  elements.heroCopy.textContent = `${v1.workflowName}. ${state.data.product.tagline}`;
 
   elements.subjectType.value = form.subjectType;
   elements.subjectName.value = form.subjectName;
@@ -55,11 +90,13 @@ function render() {
   elements.photoCheckRequired.checked = Boolean(form.photoCheckRequired);
 
   elements.workspacePath.textContent = v1.outputRoot;
-  elements.allowedDomains.innerHTML = v1.allowedDomainHints.map((domain) => `<li>${escapeHtml(domain)}</li>`).join("");
-  elements.blockedDomains.innerHTML = v1.blockedDomains.map((domain) => `<li>${escapeHtml(domain)}</li>`).join("");
+  elements.approvedDomains.innerHTML = renderDomainList(v1.approvedDomains, "approved");
+  elements.blockedDomains.innerHTML = renderDomainList(v1.blockedDomains, "blocked");
 
   elements.createRequestButton.disabled = state.creating;
   elements.createRequestButton.textContent = state.creating ? "Creating..." : "Create Request Folder";
+  elements.addApprovedDomainButton.disabled = state.domainSaving;
+  elements.addBlockedDomainButton.disabled = state.domainSaving;
 
   if (v1.jobs.length === 0) {
     elements.jobsList.innerHTML = `<div class="empty-state">No requests yet. Create the first request folder from the form above.</div>`;
@@ -79,6 +116,30 @@ function render() {
           <p><strong>Created:</strong> ${escapeHtml(job.createdAt)}</p>
           <p><strong>Folder:</strong> ${escapeHtml(job.folderPath)}</p>
         </article>
+      `
+    )
+    .join("");
+}
+
+function renderDomainList(domains, listType) {
+  if (!domains || domains.length === 0) {
+    return `<li class="domain-empty">No domains configured yet.</li>`;
+  }
+  return domains
+    .map(
+      (domain) => `
+        <li>
+          <span>${escapeHtml(domain)}</span>
+          <button
+            class="remove-chip"
+            data-action="remove-domain"
+            data-list-type="${escapeHtml(listType)}"
+            data-domain="${escapeHtml(domain)}"
+            title="Remove domain"
+          >
+            Remove
+          </button>
+        </li>
       `
     )
     .join("");
@@ -109,6 +170,56 @@ async function createRequest() {
     showToast(`Unable to create request: ${error.message}`);
   } finally {
     state.creating = false;
+    render();
+  }
+}
+
+async function addDomainRule(listType, domainValue) {
+  if (!domainValue || !domainValue.trim()) {
+    showToast("Enter a domain before adding.");
+    return;
+  }
+
+  try {
+    state.domainSaving = true;
+    render();
+    const response = await postJson("/api/v1/domain-rules", {
+      listType,
+      action: "add",
+      domain: domainValue,
+    });
+    state.data.v1Simple = response.v1Simple;
+    if (listType === "approved") {
+      elements.approvedDomainInput.value = "";
+    } else {
+      elements.blockedDomainInput.value = "";
+    }
+    showToast(response.message);
+    render();
+  } catch (error) {
+    showToast(`Unable to add domain: ${error.message}`);
+  } finally {
+    state.domainSaving = false;
+    render();
+  }
+}
+
+async function removeDomainRule(listType, domainValue) {
+  try {
+    state.domainSaving = true;
+    render();
+    const response = await postJson("/api/v1/domain-rules", {
+      listType,
+      action: "remove",
+      domain: domainValue,
+    });
+    state.data.v1Simple = response.v1Simple;
+    showToast(response.message);
+    render();
+  } catch (error) {
+    showToast(`Unable to remove domain: ${error.message}`);
+  } finally {
+    state.domainSaving = false;
     render();
   }
 }

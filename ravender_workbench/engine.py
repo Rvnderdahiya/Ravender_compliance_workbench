@@ -214,8 +214,15 @@ class WorkflowServiceAdapter:
 
 
 def build_engine():
-    base_url = os.environ.get("RAVENDER_ENGINE_BASE_URL", "").strip()
-    auth_token = os.environ.get("RAVENDER_ENGINE_AUTH_TOKEN", "").strip() or None
+    base_url = (
+        os.environ.get("COMPLIANCE_ENGINE_BASE_URL", "").strip()
+        or os.environ.get("RAVENDER_ENGINE_BASE_URL", "").strip()
+    )
+    auth_token = (
+        os.environ.get("COMPLIANCE_ENGINE_AUTH_TOKEN", "").strip()
+        or os.environ.get("RAVENDER_ENGINE_AUTH_TOKEN", "").strip()
+        or None
+    )
     if base_url:
         return WorkflowServiceAdapter(base_url=base_url, auth_token=auth_token)
     return MockAutomationEngine()

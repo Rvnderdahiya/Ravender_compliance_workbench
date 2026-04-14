@@ -26,13 +26,20 @@ def normalize_source_url(url: str) -> str:
     return cleaned
 
 
-def blank_source_builder_form(owner: str = "Compliance Automation") -> dict:
+def sanitize_owner_label(value: str) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned or "ravender" in cleaned.lower():
+        return "Compliance Operations"
+    return cleaned
+
+
+def blank_source_builder_form(owner: str = "Compliance Operations") -> dict:
     return {
         "name": "",
         "siteUrl": "",
         "sourceType": "Public website",
         "description": "",
-        "owner": owner,
+        "owner": sanitize_owner_label(owner),
     }
 
 
@@ -70,6 +77,19 @@ def slugify_folder_name(value: str) -> str:
     return cleaned or "search"
 
 
+def normalize_domain_entry(value: str) -> str:
+    cleaned = str(value or "").strip().lower()
+    cleaned = cleaned.removeprefix("http://").removeprefix("https://").strip("/")
+    cleaned = cleaned.removeprefix("www.")
+    if not cleaned:
+        raise ValueError("Domain value is required.")
+    if " " in cleaned:
+        raise ValueError("Domain value cannot contain spaces.")
+    if "." not in cleaned and not cleaned.startswith("."):
+        raise ValueError("Domain value should look like a domain, for example example.com or .gov.")
+    return cleaned
+
+
 @dataclass
 class WorkbenchRepository:
     engine: object
@@ -79,13 +99,44 @@ class WorkbenchRepository:
         self._lock = RLock()
         self.state_path = Path(self.state_path) if self.state_path else None
         self._state = self._load_state()
+        self._persist_state()
 
     def _default_v1_workspace_root(self) -> Path:
-        if self.state_path:
-            return self.state_path.parent / "v1_simple_task_workspace"
-        return Path.cwd() / "runtime_data" / "v1_simple_task_workspace"
+        return Path.home() / "Documents" / "AMEX_Compliance_Evidence_Desk_V1" / "requests"
+
+    def _sanitize_v1_output_root(self, value: str) -> str:
+        default_root = self._default_v1_workspace_root()
+        cleaned = str(value or "").strip()
+        if not cleaned:
+            return str(default_root)
+        lowered = cleaned.lower()
+        if "ravender" in lowered:
+            return str(default_root)
+        try:
+            return str(Path(cleaned).expanduser().resolve())
+        except OSError:
+            return str(default_root)
+
+    def _safe_domain_list(self, entries: list, limit: int = 25) -> list[str]:
+        normalized: list[str] = []
+        seen = set()
+        for entry in entries:
+            try:
+                cleaned = normalize_domain_entry(entry)
+            except ValueError:
+                continue
+            if cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+            if len(normalized) >= limit:
+                break
+        return normalized
 
     def _normalize_v1_job(self, job: dict, default_root: str) -> dict:
+        approved_source = job.get("approvedDomains")
+        if not isinstance(approved_source, list):
+            approved_source = job.get("allowedDomainHints") if isinstance(job.get("allowedDomainHints"), list) else []
         return {
             "id": str(job.get("id") or f"v1-{int(datetime.now(timezone.utc).timestamp() * 1000)}"),
             "createdAt": str(job.get("createdAt") or utc_now()),
@@ -96,6 +147,8 @@ class WorkbenchRepository:
             "photoCheckRequired": bool(job.get("photoCheckRequired", False)),
             "status": str(job.get("status") or "Request created"),
             "folderPath": str(job.get("folderPath") or default_root),
+            "approvedDomains": self._safe_domain_list(approved_source),
+            "blockedDomains": self._safe_domain_list(job.get("blockedDomains") or []),
             "requestFilePath": str(job.get("requestFilePath") or ""),
             "summaryFilePath": str(job.get("summaryFilePath") or ""),
         }
@@ -154,6 +207,7 @@ class WorkbenchRepository:
                 for key in ("name", "siteUrl", "sourceType", "description", "owner"):
                     if key in form:
                         builder["form"][key] = str(form.get(key) or builder["form"][key])
+                builder["form"]["owner"] = sanitize_owner_label(builder["form"]["owner"])
             recording_form = loaded_builder.get("recordingForm", {})
             if isinstance(recording_form, dict):
                 for key in ("actionType", "pageName", "targetLabel", "selectorHint", "value", "notes"):
@@ -186,23 +240,33 @@ class WorkbenchRepository:
                 v1["form"]["googlePages"] = max(1, min(int(form.get("googlePages") or 1), 3))
                 v1["form"]["photoCheckRequired"] = bool(form.get("photoCheckRequired", False))
 
-            output_root = str(loaded_v1.get("outputRoot") or "").strip()
-            if output_root:
-                v1["outputRoot"] = output_root
+            v1["outputRoot"] = self._sanitize_v1_output_root(loaded_v1.get("outputRoot") or "")
 
             if isinstance(loaded_v1.get("blockedDomains"), list):
-                v1["blockedDomains"] = [str(domain).strip() for domain in loaded_v1["blockedDomains"] if str(domain).strip()][:20]
+                v1["blockedDomains"] = self._safe_domain_list(loaded_v1["blockedDomains"])
 
-            if isinstance(loaded_v1.get("allowedDomainHints"), list):
-                v1["allowedDomainHints"] = [str(domain).strip() for domain in loaded_v1["allowedDomainHints"] if str(domain).strip()][:20]
+            loaded_approved = loaded_v1.get("approvedDomains")
+            if isinstance(loaded_approved, list):
+                v1["approvedDomains"] = self._safe_domain_list(loaded_approved)
+            elif isinstance(loaded_v1.get("allowedDomainHints"), list):
+                # Backward compatibility with the first V1 draft key.
+                v1["approvedDomains"] = self._safe_domain_list(loaded_v1["allowedDomainHints"])
 
             if isinstance(loaded_v1.get("jobs"), list):
-                v1["jobs"] = [self._normalize_v1_job(job, v1["outputRoot"]) for job in loaded_v1["jobs"][:25] if isinstance(job, dict)]
+                normalized_jobs = []
+                for job in loaded_v1["jobs"][:25]:
+                    if not isinstance(job, dict):
+                        continue
+                    normalized_job = self._normalize_v1_job(job, v1["outputRoot"])
+                    if "ravender" in normalized_job["folderPath"].lower():
+                        continue
+                    normalized_jobs.append(normalized_job)
+                v1["jobs"] = normalized_jobs
 
         return state
 
     def _normalize_source_draft(self, draft: dict) -> dict:
-        owner = str(draft.get("owner") or "Compliance Automation")
+        owner = sanitize_owner_label(draft.get("owner") or "Compliance Operations")
         normalized = {
             "id": str(draft.get("id") or f"source-{int(datetime.now(timezone.utc).timestamp() * 1000)}"),
             "name": str(draft.get("name") or "").strip(),
@@ -257,9 +321,9 @@ class WorkbenchRepository:
     def _build_seed_state(self) -> dict:
         return {
             "product": {
-                "name": "Ravender Workbench",
-                "version": "0.7.0",
-                "tagline": "Single-workflow search evidence intake for non-technical compliance teams.",
+                "name": "AMEX Compliance Evidence Desk",
+                "version": "1.0.0",
+                "tagline": "Focused daily web search intake for compliance evidence collection.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
             },
@@ -579,7 +643,7 @@ class WorkbenchRepository:
             },
             "v1Simple": {
                 "workflowName": "Google Evidence Search V1",
-                "outputRoot": str(self._default_v1_workspace_root().resolve()),
+                "outputRoot": self._sanitize_v1_output_root(str(self._default_v1_workspace_root())),
                 "form": blank_v1_search_form(),
                 "blockedDomains": [
                     "linkedin.com",
@@ -589,12 +653,15 @@ class WorkbenchRepository:
                     "twitter.com",
                     "tiktok.com",
                 ],
-                "allowedDomainHints": [
+                "approvedDomains": [
                     ".gov",
                     ".nic.in",
-                    "official regulator websites",
-                    "authorized public registries",
-                    "court or legal notice websites",
+                    ".gov.uk",
+                    ".gc.ca",
+                    "sec.gov",
+                    "fca.org.uk",
+                    "rbi.org.in",
+                    "bseindia.com",
                 ],
                 "jobs": [],
                 "notes": [
@@ -817,8 +884,8 @@ class WorkbenchRepository:
                 "subjectDetails": cleaned_details,
                 "googlePages": pages,
                 "photoCheckRequired": bool(photo_check_required),
+                "approvedDomains": list(v1["approvedDomains"]),
                 "blockedDomains": list(v1["blockedDomains"]),
-                "allowedDomainHints": list(v1["allowedDomainHints"]),
                 "status": "Request created",
                 "folderPath": str(request_folder.resolve()),
             }
@@ -859,6 +926,45 @@ class WorkbenchRepository:
                 "message": f"Request folder created for {cleaned_name}.",
             }
 
+    def update_v1_domain_rule(self, *, list_type: str, action: str, domain: str) -> dict:
+        with self._lock:
+            v1 = self._state["v1Simple"]
+            cleaned_type = str(list_type or "").strip().lower()
+            cleaned_action = str(action or "").strip().lower()
+            cleaned_domain = normalize_domain_entry(domain)
+
+            if cleaned_type not in {"approved", "blocked"}:
+                raise ValueError("List type must be approved or blocked.")
+            if cleaned_action not in {"add", "remove"}:
+                raise ValueError("Action must be add or remove.")
+
+            key = "approvedDomains" if cleaned_type == "approved" else "blockedDomains"
+            opposite_key = "blockedDomains" if cleaned_type == "approved" else "approvedDomains"
+            target = list(v1[key])
+            opposite = list(v1[opposite_key])
+
+            if cleaned_action == "add":
+                if cleaned_domain not in target:
+                    target.append(cleaned_domain)
+                if cleaned_domain in opposite:
+                    opposite.remove(cleaned_domain)
+                message = f"{cleaned_domain} added to {cleaned_type} domains."
+            else:
+                if cleaned_domain in target:
+                    target.remove(cleaned_domain)
+                    message = f"{cleaned_domain} removed from {cleaned_type} domains."
+                else:
+                    message = f"{cleaned_domain} was not present in {cleaned_type} domains."
+
+            v1[key] = sorted(target)[:40]
+            v1[opposite_key] = sorted(opposite)[:40]
+            self._persist_state()
+            return {
+                "ok": True,
+                "v1Simple": deepcopy(v1),
+                "message": message,
+            }
+
     def save_source_draft(
         self,
         *,
@@ -872,7 +978,7 @@ class WorkbenchRepository:
             builder = self._state["sourceBuilder"]
             allowed_types = set(builder["sourceTypes"])
             cleaned_name = str(name or "").strip()
-            cleaned_owner = str(owner or "").strip() or "Compliance Automation"
+            cleaned_owner = sanitize_owner_label(owner)
             cleaned_type = str(source_type or "").strip()
             cleaned_description = str(description or "").strip()
             normalized_url = normalize_source_url(site_url)

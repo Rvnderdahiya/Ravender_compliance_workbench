@@ -1,13 +1,13 @@
 :root {
-  --paper: #f4efe4;
-  --ink: #142634;
-  --ink-soft: #4f6170;
-  --card: rgba(255, 252, 247, 0.92);
-  --line: rgba(20, 38, 52, 0.14);
-  --brand: #ba6533;
-  --brand-dark: #7f3b1d;
-  --ocean: #0d5f66;
-  --shadow: 0 20px 48px rgba(42, 26, 14, 0.14);
+  --paper: #eef3f8;
+  --ink: #10273a;
+  --ink-soft: #496073;
+  --card: rgba(255, 255, 255, 0.93);
+  --line: rgba(16, 39, 58, 0.14);
+  --brand: #0f4b7a;
+  --brand-dark: #093453;
+  --ocean: #0a6870;
+  --shadow: 0 20px 48px rgba(18, 34, 54, 0.12);
 }
 
 * {
@@ -20,9 +20,9 @@ body {
   font-family: "Manrope", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 0%, rgba(186, 101, 51, 0.13), transparent 30%),
-    radial-gradient(circle at 90% 20%, rgba(13, 95, 102, 0.15), transparent 25%),
-    linear-gradient(140deg, #f9f5ee 0%, #efe2cf 100%);
+    radial-gradient(circle at 5% 0%, rgba(15, 75, 122, 0.12), transparent 32%),
+    radial-gradient(circle at 92% 15%, rgba(10, 104, 112, 0.12), transparent 28%),
+    linear-gradient(140deg, #f5f8fc 0%, #ebf1f8 100%);
 }
 
 .page-shell {
@@ -44,8 +44,8 @@ body {
 .hero-card {
   padding: 24px;
   background:
-    linear-gradient(120deg, rgba(255, 248, 238, 0.94), rgba(248, 235, 214, 0.92)),
-    linear-gradient(140deg, rgba(20, 38, 52, 0.06), rgba(186, 101, 51, 0.1));
+    linear-gradient(120deg, rgba(251, 254, 255, 0.96), rgba(235, 244, 250, 0.93)),
+    linear-gradient(140deg, rgba(16, 39, 58, 0.06), rgba(15, 75, 122, 0.12));
 }
 
 .eyebrow,
@@ -145,7 +145,7 @@ textarea {
   padding: 12px 18px;
   font-weight: 800;
   color: #fff;
-  background: linear-gradient(135deg, var(--brand), #da8a52);
+  background: linear-gradient(135deg, var(--brand), #1a6ba8);
   cursor: pointer;
 }
 
@@ -157,6 +157,28 @@ textarea {
 .hint-text {
   margin: 12px 0 0;
   color: var(--ink-soft);
+}
+
+.domain-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.btn-outline {
+  border: 1px solid rgba(15, 75, 122, 0.28);
+  background: rgba(15, 75, 122, 0.08);
+  color: var(--brand-dark);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-outline:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .path-box {
@@ -191,10 +213,35 @@ textarea {
 }
 
 .chip-list li {
-  padding: 7px 11px;
-  border-radius: 999px;
+  padding: 7px 10px;
+  border-radius: 12px;
   background: rgba(20, 38, 52, 0.08);
   font-size: 0.84rem;
+}
+
+.managed-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.remove-chip {
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  color: #fff;
+  background: rgba(16, 39, 58, 0.75);
+  cursor: pointer;
+}
+
+.remove-chip:hover {
+  background: rgba(16, 39, 58, 0.9);
+}
+
+.domain-empty {
+  background: rgba(16, 39, 58, 0.05);
+  color: var(--ink-soft);
 }
 
 .jobs-list {
@@ -258,6 +305,10 @@ textarea {
 
 @media (max-width: 900px) {
   .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .domain-input-row {
     grid-template-columns: 1fr;
   }
 }

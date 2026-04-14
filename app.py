@@ -20,13 +20,13 @@ REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workben
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.7"
+    server_version = "AMEXComplianceEvidenceDesk/1.0"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
 
         if path == "/api/health":
-            self._send_json({"ok": True, "service": "ravender-workbench"})
+            self._send_json({"ok": True, "service": "amex-compliance-evidence-desk"})
             return
 
         if path == "/api/bootstrap":
@@ -101,6 +101,16 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         subject_details=str(payload.get("subjectDetails", "")).strip(),
                         google_pages=int(payload.get("googlePages", 1)),
                         photo_check_required=bool(payload.get("photoCheckRequired", False)),
+                    )
+                )
+                return
+
+            if path == "/api/v1/domain-rules":
+                self._send_json(
+                    REPO.update_v1_domain_rule(
+                        list_type=str(payload.get("listType", "")).strip(),
+                        action=str(payload.get("action", "")).strip(),
+                        domain=str(payload.get("domain", "")).strip(),
                     )
                 )
                 return
@@ -206,7 +216,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 def main() -> None:
     port = int(os.environ.get("PORT", "8080"))
     server = ThreadingHTTPServer(("127.0.0.1", port), WorkbenchHandler)
-    print(f"Ravender Workbench listening on http://127.0.0.1:{port}")
+    print(f"AMEX Compliance Evidence Desk listening on http://127.0.0.1:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
