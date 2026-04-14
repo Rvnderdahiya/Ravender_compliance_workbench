@@ -7,7 +7,7 @@ import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from ravender_workbench.engine import build_engine
 from ravender_workbench.repository import WorkbenchRepository
@@ -23,7 +23,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
     server_version = "AMEXComplianceEvidenceDesk/1.0"
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
 
         if path == "/api/health":
             self._send_json({"ok": True, "service": "amex-compliance-evidence-desk"})
@@ -31,6 +32,33 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
         if path == "/api/bootstrap":
             self._send_json(REPO.get_bootstrap())
+            return
+
+        artifact_list_match = re.fullmatch(r"/api/v1/search-requests/([^/]+)/artifacts", path)
+        if artifact_list_match:
+            job_id = artifact_list_match.group(1)
+            try:
+                self._send_json(REPO.list_v1_artifacts(job_id))
+            except (KeyError, ValueError) as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        artifact_file_match = re.fullmatch(r"/api/v1/search-requests/([^/]+)/artifact", path)
+        if artifact_file_match:
+            job_id = artifact_file_match.group(1)
+            relative_path = (parse_qs(parsed.query).get("path") or [""])[0]
+            if not relative_path:
+                self._send_json({"error": "Artifact path is required."}, status=HTTPStatus.BAD_REQUEST)
+                return
+            try:
+                file_payload = REPO.read_v1_artifact(job_id, relative_path)
+                self._send_binary(
+                    body=file_payload["content"],
+                    mime_type=file_payload["mimeType"],
+                    file_name=file_payload["name"],
+                )
+            except (KeyError, ValueError) as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
             return
 
         if path == "/" or path == "/index.html":
@@ -215,6 +243,17 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_binary(self, *, body: bytes, mime_type: str, file_name: str) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", mime_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        self.send_header("Content-Disposition", f'inline; filename="{file_name}"')
         self.end_headers()
         self.wfile.write(body)
 

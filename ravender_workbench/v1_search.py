@@ -63,6 +63,77 @@ def strip_html(html: str) -> str:
     return normalize_space(unescape(cleaned))
 
 
+def build_result_digest_html(
+    *,
+    query: str,
+    deduped: list[ParsedResult],
+    approved_candidates: list[ParsedResult],
+    blocked_skips: list[ParsedResult],
+    not_approved_skips: list[ParsedResult],
+    evaluated: list[dict],
+) -> str:
+    result_rows = []
+    for result in deduped[:40]:
+        if result.blocked:
+            status = "Blocked"
+        elif result.approved:
+            status = "Approved"
+        else:
+            status = "Not approved"
+        result_rows.append(
+            "<tr>"
+            f"<td>{result.source_page}</td>"
+            f"<td>{result.rank}</td>"
+            f"<td>{status}</td>"
+            f"<td>{result.domain}</td>"
+            f"<td><a href=\"{result.url}\">{result.title}</a></td>"
+            "</tr>"
+        )
+
+    evaluated_rows = []
+    for item in evaluated:
+        artifact = item.get("artifact") or {}
+        evaluated_rows.append(
+            "<tr>"
+            f"<td>{item.get('matchStrength', '')}</td>"
+            f"<td>{'Yes' if item.get('photoPresent') else 'No'}</td>"
+            f"<td>{'Yes' if artifact.get('pdfCaptured') else 'No'}</td>"
+            f"<td>{'Yes' if artifact.get('screenshotCaptured') else 'No'}</td>"
+            f"<td>{(item.get('pageError') or '-')[:180]}</td>"
+            f"<td><a href=\"{item.get('url','')}\">{item.get('domain','')}</a></td>"
+            "</tr>"
+        )
+
+    result_rows_html = "".join(result_rows) if result_rows else "<tr><td colspan='5'>No results captured.</td></tr>"
+    evaluated_rows_html = "".join(evaluated_rows) if evaluated_rows else "<tr><td colspan='6'>No approved candidates evaluated.</td></tr>"
+
+    return (
+        "<!doctype html><html><head><meta charset='utf-8' />"
+        "<style>"
+        "body{font-family:Arial,sans-serif;padding:18px;color:#123;}"
+        "h1,h2{margin:0 0 10px;} .meta{margin:0 0 16px;color:#456;}"
+        "table{width:100%;border-collapse:collapse;margin:10px 0 18px;}"
+        "th,td{border:1px solid #d0d7de;padding:6px 8px;font-size:12px;vertical-align:top;}"
+        "th{background:#f4f8fc;text-align:left;} a{color:#0f4b7a;text-decoration:none;}"
+        "</style></head><body>"
+        f"<h1>Compliance Search Result Digest</h1>"
+        f"<p class='meta'><strong>Query:</strong> {query}</p>"
+        "<p class='meta'>"
+        f"<strong>Total results:</strong> {len(deduped)} | "
+        f"<strong>Approved:</strong> {len(approved_candidates)} | "
+        f"<strong>Blocked:</strong> {len(blocked_skips)} | "
+        f"<strong>Not approved:</strong> {len(not_approved_skips)}"
+        "</p>"
+        "<h2>Search Results</h2>"
+        "<table><thead><tr><th>Page</th><th>Rank</th><th>Status</th><th>Domain</th><th>Title</th></tr></thead>"
+        f"<tbody>{result_rows_html}</tbody></table>"
+        "<h2>Approved Candidate Evaluation</h2>"
+        "<table><thead><tr><th>Match</th><th>Photo</th><th>PDF</th><th>Screenshot</th><th>Error</th><th>URL</th></tr></thead>"
+        f"<tbody>{evaluated_rows_html}</tbody></table>"
+        "</body></html>"
+    )
+
+
 def domain_matches_rule(domain: str, rule: str) -> bool:
     normalized_domain = (domain or "").lower().strip()
     normalized_rule = (rule or "").lower().strip()
@@ -275,8 +346,8 @@ def run_v1_search_job(
     warnings: list[str] = []
     browser = find_headless_browser()
     capture_notes: list[str] = []
-    search_page_pdf_captured = 0
-    search_page_screenshots_captured = 0
+    digest_pdf_captured = 0
+    digest_screenshot_captured = 0
 
     for page in range(1, google_pages + 1):
         start = (page - 1) * 10
@@ -284,16 +355,6 @@ def run_v1_search_job(
         try:
             html = fetch_text(url)
             (raw_dir / f"google_page_{page}.html").write_text(html, encoding="utf-8")
-            if browser:
-                pdf_path = pdf_dir / f"search_google_page_{page:02d}.pdf"
-                screenshot_path = screenshot_dir / f"search_google_page_{page:02d}.png"
-                pdf_ok, screenshot_ok, note = run_headless_capture(browser, url, pdf_path, screenshot_path)
-                if pdf_ok:
-                    search_page_pdf_captured += 1
-                if screenshot_ok:
-                    search_page_screenshots_captured += 1
-                if note:
-                    capture_notes.append(note)
             parsed = parse_google_result_links(html, page, approved_domains, blocked_domains)
             all_results.extend(parsed)
         except Exception as error:
@@ -307,16 +368,6 @@ def run_v1_search_job(
             try:
                 html = fetch_text(fallback_url)
                 (raw_dir / f"fallback_page_{page}.html").write_text(html, encoding="utf-8")
-                if browser:
-                    pdf_path = pdf_dir / f"search_fallback_page_{page:02d}.pdf"
-                    screenshot_path = screenshot_dir / f"search_fallback_page_{page:02d}.png"
-                    pdf_ok, screenshot_ok, note = run_headless_capture(browser, fallback_url, pdf_path, screenshot_path)
-                    if pdf_ok:
-                        search_page_pdf_captured += 1
-                    if screenshot_ok:
-                        search_page_screenshots_captured += 1
-                    if note:
-                        capture_notes.append(note)
                 parsed = parse_duckduckgo_result_links(html, page, approved_domains, blocked_domains)
                 all_results.extend(parsed)
             except Exception as error:
@@ -407,13 +458,41 @@ def run_v1_search_job(
     pdf_captured = sum(1 for item in evaluated if item["artifact"].get("pdfCaptured"))
     screenshots_captured = sum(1 for item in evaluated if item["artifact"].get("screenshotCaptured"))
 
+    digest_html = build_result_digest_html(
+        query=query,
+        deduped=deduped,
+        approved_candidates=approved_candidates,
+        blocked_skips=blocked_skips,
+        not_approved_skips=not_approved_skips,
+        evaluated=evaluated,
+    )
+    digest_html_path = notes_dir / "result_digest.html"
+    digest_html_path.write_text(digest_html, encoding="utf-8")
+    if browser:
+        digest_pdf_path = pdf_dir / "result_digest.pdf"
+        digest_screenshot_path = screenshot_dir / "result_digest.png"
+        digest_pdf_ok, digest_screenshot_ok, digest_note = run_headless_capture(
+            browser,
+            digest_html_path.resolve().as_uri(),
+            digest_pdf_path,
+            digest_screenshot_path,
+        )
+        if digest_pdf_ok:
+            digest_pdf_captured = 1
+        if digest_screenshot_ok:
+            digest_screenshot_captured = 1
+        if digest_note:
+            capture_notes.append(digest_note)
+
     used_fallback = any("fallback" in note.lower() for note in warnings)
     summary = {
         "query": query,
         "searchPath": "Google + fallback" if used_fallback else "Google",
         "googlePagesRequested": google_pages,
-        "searchPagePdfCaptured": search_page_pdf_captured,
-        "searchPageScreenshotsCaptured": search_page_screenshots_captured,
+        "searchPagePdfCaptured": 0,
+        "searchPageScreenshotsCaptured": 0,
+        "digestPdfCaptured": digest_pdf_captured,
+        "digestScreenshotCaptured": digest_screenshot_captured,
         "googleResultsFound": len(deduped),
         "approvedCandidates": len(approved_candidates),
         "blockedSkipped": len(blocked_skips),
@@ -437,8 +516,10 @@ def run_v1_search_job(
             f"Query: {query}\n"
             f"Search path: {'Google + fallback' if used_fallback else 'Google'}\n"
             f"Google pages requested: {google_pages}\n"
-            f"Search pages PDF captured: {search_page_pdf_captured}\n"
-            f"Search pages screenshots captured: {search_page_screenshots_captured}\n"
+            "Search pages PDF captured: 0\n"
+            "Search pages screenshots captured: 0\n"
+            f"Digest PDF captured: {digest_pdf_captured}\n"
+            f"Digest screenshot captured: {digest_screenshot_captured}\n"
             f"Total results seen: {len(deduped)}\n"
             f"Approved candidates: {len(approved_candidates)}\n"
             f"Blocked skipped: {len(blocked_skips)}\n"

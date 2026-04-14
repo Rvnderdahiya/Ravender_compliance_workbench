@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import mimetypes
 from pathlib import Path
 import re
 from threading import RLock
@@ -748,6 +749,15 @@ class WorkbenchRepository:
                 return job
         raise KeyError(f"Search request not found: {job_id}")
 
+    def _resolve_job_file_path(self, job: dict, relative_path: str) -> Path:
+        base = Path(job["folderPath"]).resolve()
+        target = (base / str(relative_path or "").replace("\\", "/")).resolve()
+        if not str(target).startswith(str(base)):
+            raise ValueError("Invalid artifact path.")
+        if not target.exists() or not target.is_file():
+            raise ValueError("Artifact file not found.")
+        return target
+
     def _build_stats(self) -> list[dict]:
         cases = self._state["cases"]
         packs = self._state["packs"]
@@ -1035,6 +1045,69 @@ class WorkbenchRepository:
                 "v1Simple": deepcopy(self._state["v1Simple"]),
                 "message": f"Search execution completed for {current_job['subjectName']}.",
             }
+
+    def list_v1_artifacts(self, job_id: str) -> dict:
+        with self._lock:
+            job = deepcopy(self._find_v1_job(job_id))
+
+        folder = Path(job["folderPath"]).resolve()
+        if not folder.exists():
+            raise ValueError("Request folder does not exist on disk.")
+
+        groups = [
+            ("summary", "Summary", ["request.json", "notes/run_summary.json", "notes/run_summary.txt", "notes/summary.txt"]),
+            ("pdf", "PDF Evidence", ["pdf/*.pdf"]),
+            ("screenshots", "Screenshot Evidence", ["screenshots/*.png", "screenshots/*.jpg", "screenshots/*.jpeg", "screenshots/*.webp"]),
+            ("debug", "Debug Search Files", ["search_raw/*.html"]),
+        ]
+
+        artifacts = {}
+        for key, label, patterns in groups:
+            items = []
+            seen = set()
+            for pattern in patterns:
+                for path in folder.glob(pattern):
+                    resolved = path.resolve()
+                    if not resolved.is_file():
+                        continue
+                    rel = resolved.relative_to(folder).as_posix()
+                    if rel in seen:
+                        continue
+                    seen.add(rel)
+                    items.append(
+                        {
+                            "name": resolved.name,
+                            "relativePath": rel,
+                            "sizeBytes": int(resolved.stat().st_size),
+                            "updatedAt": datetime.fromtimestamp(resolved.stat().st_mtime, timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                        }
+                    )
+            items.sort(key=lambda item: item["name"].lower())
+            artifacts[key] = {
+                "label": label,
+                "count": len(items),
+                "items": items,
+            }
+
+        return {
+            "ok": True,
+            "jobId": job["id"],
+            "subjectName": job["subjectName"],
+            "folderPath": str(folder),
+            "artifacts": artifacts,
+        }
+
+    def read_v1_artifact(self, job_id: str, relative_path: str) -> dict:
+        with self._lock:
+            job = deepcopy(self._find_v1_job(job_id))
+        target = self._resolve_job_file_path(job, relative_path)
+        mime_type, _ = mimetypes.guess_type(str(target))
+        return {
+            "path": str(target),
+            "name": target.name,
+            "mimeType": mime_type or "application/octet-stream",
+            "content": target.read_bytes(),
+        }
 
     def save_source_draft(
         self,

@@ -299,6 +299,63 @@ textarea {
   margin: 5px 0 0;
 }
 
+.evidence-panel {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 75, 122, 0.18);
+  background: rgba(15, 75, 122, 0.05);
+  display: grid;
+  gap: 8px;
+}
+
+.artifact-group h4 {
+  margin: 0;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.artifact-group summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.artifact-group ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.artifact-group li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(16, 39, 58, 0.12);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.artifact-group a {
+  color: var(--brand);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.artifact-group a:hover {
+  text-decoration: underline;
+}
+
+.artifact-group span {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+}
+
 .empty-state {
   padding: 14px;
   border: 1px dashed var(--line);

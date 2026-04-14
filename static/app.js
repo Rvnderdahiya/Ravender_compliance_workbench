@@ -4,6 +4,8 @@ const state = {
   creating: false,
   domainSaving: false,
   runningJobId: "",
+  loadingArtifactsJobId: "",
+  artifactsByJobId: {},
 };
 
 const elements = {
@@ -59,6 +61,12 @@ function bindEvents() {
   });
 
   document.addEventListener("click", async (event) => {
+    const loadArtifactsButton = event.target.closest("[data-action='load-artifacts']");
+    if (loadArtifactsButton) {
+      await loadArtifacts(loadArtifactsButton.dataset.jobId);
+      return;
+    }
+
     const runButton = event.target.closest("[data-action='run-job']");
     if (runButton) {
       await runSearchRequest(runButton.dataset.jobId);
@@ -133,7 +141,16 @@ function render() {
             >
               ${state.runningJobId === job.id ? "Running..." : "Run Search"}
             </button>
+            <button
+              class="btn-outline"
+              data-action="load-artifacts"
+              data-job-id="${escapeHtml(job.id)}"
+              ${state.loadingArtifactsJobId === job.id ? "disabled" : ""}
+            >
+              ${state.loadingArtifactsJobId === job.id ? "Loading..." : "View Evidence"}
+            </button>
           </div>
+          ${renderArtifactsPanel(job.id)}
         </article>
       `
     )
@@ -150,7 +167,7 @@ function renderRunSummary(summary) {
   return `
     <div class="run-summary">
       <p><strong>Search path:</strong> ${escapeHtml(summary.searchPath || "Google")}</p>
-      <p><strong>Search pages PDF:</strong> ${escapeHtml(String(summary.searchPagePdfCaptured ?? 0))} | <strong>Search pages screenshots:</strong> ${escapeHtml(String(summary.searchPageScreenshotsCaptured ?? 0))}</p>
+      <p><strong>Digest PDF:</strong> ${escapeHtml(String(summary.digestPdfCaptured ?? 0))} | <strong>Digest screenshot:</strong> ${escapeHtml(String(summary.digestScreenshotCaptured ?? 0))}</p>
       <p><strong>Results seen:</strong> ${escapeHtml(String(summary.googleResultsFound ?? 0))}</p>
       <p><strong>Approved candidates:</strong> ${escapeHtml(String(summary.approvedCandidates ?? 0))}</p>
       <p><strong>Strong matches:</strong> ${escapeHtml(String(summary.strongMatches ?? 0))} | <strong>Possible:</strong> ${escapeHtml(String(summary.possibleMatches ?? 0))}</p>
@@ -280,6 +297,87 @@ async function runSearchRequest(jobId) {
     state.runningJobId = "";
     render();
   }
+}
+
+async function loadArtifacts(jobId) {
+  if (!jobId) {
+    return;
+  }
+  try {
+    state.loadingArtifactsJobId = jobId;
+    render();
+    const response = await fetch(`/api/v1/search-requests/${encodeURIComponent(jobId)}/artifacts`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to load artifacts.");
+    }
+    state.artifactsByJobId[jobId] = payload;
+    showToast("Evidence loaded.");
+    render();
+  } catch (error) {
+    showToast(`Unable to load artifacts: ${error.message}`);
+  } finally {
+    state.loadingArtifactsJobId = "";
+    render();
+  }
+}
+
+function renderArtifactsPanel(jobId) {
+  const payload = state.artifactsByJobId[jobId];
+  if (!payload) {
+    return `<div class="evidence-panel"><p class="run-note"><strong>Evidence:</strong> Click View Evidence to load files from this request folder.</p></div>`;
+  }
+
+  const blocks = [
+    renderArtifactGroup(jobId, payload.artifacts.summary, false),
+    renderArtifactGroup(jobId, payload.artifacts.pdf, false),
+    renderArtifactGroup(jobId, payload.artifacts.screenshots, false),
+    renderArtifactGroup(jobId, payload.artifacts.debug, true),
+  ];
+
+  return `<div class="evidence-panel">${blocks.join("")}</div>`;
+}
+
+function renderArtifactGroup(jobId, group, collapsed) {
+  if (!group) {
+    return "";
+  }
+  if (group.count === 0) {
+    return `
+      <section class="artifact-group">
+        <h4>${escapeHtml(group.label)}</h4>
+        <p class="run-note">No files in this group yet.</p>
+      </section>
+    `;
+  }
+
+  const list = group.items
+    .map((item) => {
+      const href = `/api/v1/search-requests/${encodeURIComponent(jobId)}/artifact?path=${encodeURIComponent(item.relativePath)}`;
+      return `
+        <li>
+          <a href="${href}" target="_blank" rel="noreferrer">${escapeHtml(item.name)}</a>
+          <span>${escapeHtml(String(item.sizeBytes))} bytes</span>
+        </li>
+      `;
+    })
+    .join("");
+
+  if (collapsed) {
+    return `
+      <details class="artifact-group">
+        <summary>${escapeHtml(group.label)} (${escapeHtml(String(group.count))})</summary>
+        <ul>${list}</ul>
+      </details>
+    `;
+  }
+
+  return `
+    <section class="artifact-group">
+      <h4>${escapeHtml(group.label)} (${escapeHtml(String(group.count))})</h4>
+      <ul>${list}</ul>
+    </section>
+  `;
 }
 
 async function postJson(url, body) {
