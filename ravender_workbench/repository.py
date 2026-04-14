@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 from threading import RLock
 
 from ravender_workbench.public_web import investigate_public_website
@@ -54,6 +55,21 @@ def blank_recording_session_form() -> dict:
     }
 
 
+def blank_v1_search_form() -> dict:
+    return {
+        "subjectType": "Person",
+        "subjectName": "",
+        "subjectDetails": "",
+        "googlePages": 1,
+        "photoCheckRequired": False,
+    }
+
+
+def slugify_folder_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "-", str(value or "").strip()).strip("-").lower()
+    return cleaned or "search"
+
+
 @dataclass
 class WorkbenchRepository:
     engine: object
@@ -63,6 +79,26 @@ class WorkbenchRepository:
         self._lock = RLock()
         self.state_path = Path(self.state_path) if self.state_path else None
         self._state = self._load_state()
+
+    def _default_v1_workspace_root(self) -> Path:
+        if self.state_path:
+            return self.state_path.parent / "v1_simple_task_workspace"
+        return Path.cwd() / "runtime_data" / "v1_simple_task_workspace"
+
+    def _normalize_v1_job(self, job: dict, default_root: str) -> dict:
+        return {
+            "id": str(job.get("id") or f"v1-{int(datetime.now(timezone.utc).timestamp() * 1000)}"),
+            "createdAt": str(job.get("createdAt") or utc_now()),
+            "subjectType": str(job.get("subjectType") or "Person"),
+            "subjectName": str(job.get("subjectName") or "").strip(),
+            "subjectDetails": str(job.get("subjectDetails") or "").strip(),
+            "googlePages": max(1, min(int(job.get("googlePages") or 1), 3)),
+            "photoCheckRequired": bool(job.get("photoCheckRequired", False)),
+            "status": str(job.get("status") or "Request created"),
+            "folderPath": str(job.get("folderPath") or default_root),
+            "requestFilePath": str(job.get("requestFilePath") or ""),
+            "summaryFilePath": str(job.get("summaryFilePath") or ""),
+        }
 
     def _load_state(self) -> dict:
         seed = self._build_seed_state()
@@ -138,6 +174,31 @@ class WorkbenchRepository:
             if isinstance(loaded_builder.get("drafts"), list):
                 builder["drafts"] = [self._normalize_source_draft(draft) for draft in loaded_builder["drafts"][:12]]
 
+        loaded_v1 = loaded.get("v1Simple", {})
+        v1 = state["v1Simple"]
+        if isinstance(loaded_v1, dict):
+            form = loaded_v1.get("form", {})
+            if isinstance(form, dict):
+                if str(form.get("subjectType") or "") in {"Person", "Company"}:
+                    v1["form"]["subjectType"] = str(form.get("subjectType"))
+                v1["form"]["subjectName"] = str(form.get("subjectName") or "")
+                v1["form"]["subjectDetails"] = str(form.get("subjectDetails") or "")
+                v1["form"]["googlePages"] = max(1, min(int(form.get("googlePages") or 1), 3))
+                v1["form"]["photoCheckRequired"] = bool(form.get("photoCheckRequired", False))
+
+            output_root = str(loaded_v1.get("outputRoot") or "").strip()
+            if output_root:
+                v1["outputRoot"] = output_root
+
+            if isinstance(loaded_v1.get("blockedDomains"), list):
+                v1["blockedDomains"] = [str(domain).strip() for domain in loaded_v1["blockedDomains"] if str(domain).strip()][:20]
+
+            if isinstance(loaded_v1.get("allowedDomainHints"), list):
+                v1["allowedDomainHints"] = [str(domain).strip() for domain in loaded_v1["allowedDomainHints"] if str(domain).strip()][:20]
+
+            if isinstance(loaded_v1.get("jobs"), list):
+                v1["jobs"] = [self._normalize_v1_job(job, v1["outputRoot"]) for job in loaded_v1["jobs"][:25] if isinstance(job, dict)]
+
         return state
 
     def _normalize_source_draft(self, draft: dict) -> dict:
@@ -197,8 +258,8 @@ class WorkbenchRepository:
         return {
             "product": {
                 "name": "Ravender Workbench",
-                "version": "0.6.0",
-                "tagline": "Case-first investigations for analysts, with website investigation and source-definition workflows.",
+                "version": "0.7.0",
+                "tagline": "Single-workflow search evidence intake for non-technical compliance teams.",
                 "engine": getattr(self.engine, "name", "unknown"),
                 "hostingMode": "Single machine pilot",
             },
@@ -516,6 +577,32 @@ class WorkbenchRepository:
                     "Automatic browser instrumentation, input mapping, testing, and publishing still come in later slices.",
                 ],
             },
+            "v1Simple": {
+                "workflowName": "Google Evidence Search V1",
+                "outputRoot": str(self._default_v1_workspace_root().resolve()),
+                "form": blank_v1_search_form(),
+                "blockedDomains": [
+                    "linkedin.com",
+                    "facebook.com",
+                    "instagram.com",
+                    "x.com",
+                    "twitter.com",
+                    "tiktok.com",
+                ],
+                "allowedDomainHints": [
+                    ".gov",
+                    ".nic.in",
+                    "official regulator websites",
+                    "authorized public registries",
+                    "court or legal notice websites",
+                ],
+                "jobs": [],
+                "notes": [
+                    "This version keeps one focused workflow only.",
+                    "Each request gets a dedicated local folder with request metadata.",
+                    "Execution automation for Google pages and evidence capture is added in the next step.",
+                ],
+            },
             "blueprint": {
                 "principles": [
                     "Analysts learn the UI, not automation internals.",
@@ -685,6 +772,91 @@ class WorkbenchRepository:
                 "investigation": deepcopy(result),
                 "recentRuns": deepcopy(investigator["recentRuns"]),
                 "message": f"Public investigation completed for {result['domain']}.",
+            }
+
+    def create_v1_search_request(
+        self,
+        *,
+        subject_type: str,
+        subject_name: str,
+        subject_details: str,
+        google_pages: int,
+        photo_check_required: bool,
+    ) -> dict:
+        with self._lock:
+            v1 = self._state["v1Simple"]
+            cleaned_type = str(subject_type or "").strip()
+            cleaned_name = str(subject_name or "").strip()
+            cleaned_details = str(subject_details or "").strip()
+
+            if cleaned_type not in {"Person", "Company"}:
+                raise ValueError("Search type must be Person or Company.")
+            if not cleaned_name:
+                raise ValueError("Name to search is required.")
+
+            pages = max(1, min(int(google_pages), 3))
+            created_at = utc_now()
+            stamp = int(datetime.now(timezone.utc).timestamp() * 1000)
+            slug = slugify_folder_name(cleaned_name)[:56]
+            folder_name = f"{slug}-{stamp}"
+
+            workspace_root = Path(v1["outputRoot"])
+            request_folder = workspace_root / folder_name
+            pdf_folder = request_folder / "pdf"
+            screenshots_folder = request_folder / "screenshots"
+            notes_folder = request_folder / "notes"
+            pdf_folder.mkdir(parents=True, exist_ok=True)
+            screenshots_folder.mkdir(parents=True, exist_ok=True)
+            notes_folder.mkdir(parents=True, exist_ok=True)
+
+            request_payload = {
+                "id": f"v1-{stamp}",
+                "createdAt": created_at,
+                "subjectType": cleaned_type,
+                "subjectName": cleaned_name,
+                "subjectDetails": cleaned_details,
+                "googlePages": pages,
+                "photoCheckRequired": bool(photo_check_required),
+                "blockedDomains": list(v1["blockedDomains"]),
+                "allowedDomainHints": list(v1["allowedDomainHints"]),
+                "status": "Request created",
+                "folderPath": str(request_folder.resolve()),
+            }
+
+            request_file = request_folder / "request.json"
+            summary_file = notes_folder / "summary.txt"
+            request_file.write_text(json.dumps(request_payload, indent=2), encoding="utf-8")
+            summary_file.write_text(
+                (
+                    "V1 request created.\n"
+                    f"Name: {cleaned_name}\n"
+                    f"Type: {cleaned_type}\n"
+                    f"Google depth: first {pages} page(s)\n"
+                    f"Photo check required: {'Yes' if photo_check_required else 'No'}\n"
+                    "Execution automation is added in the next step.\n"
+                ),
+                encoding="utf-8",
+            )
+
+            request_payload["requestFilePath"] = str(request_file.resolve())
+            request_payload["summaryFilePath"] = str(summary_file.resolve())
+
+            v1["jobs"].insert(0, request_payload)
+            v1["jobs"] = v1["jobs"][:25]
+            v1["form"] = {
+                "subjectType": cleaned_type,
+                "subjectName": "",
+                "subjectDetails": "",
+                "googlePages": pages,
+                "photoCheckRequired": bool(photo_check_required),
+            }
+
+            self._persist_state()
+            return {
+                "ok": True,
+                "job": deepcopy(request_payload),
+                "v1Simple": deepcopy(v1),
+                "message": f"Request folder created for {cleaned_name}.",
             }
 
     def save_source_draft(

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ravender Workbench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Compliance Search Operations</p>
+          <h1 id="hero-title">Ravender Workbench</h1>
+          <p class="hero-text" id="hero-text">
+            Website investigation for analysts, with a builder flow for defining new sources step by step.
+          </p>
+        </div>
+        <div class="hero-stats" id="hero-stats"></div>
+      </header>
+
+      <nav class="tab-row" id="tab-row">
+        <button class="tab is-active" data-tab="public">Website Investigator</button>
+        <button class="tab" data-tab="builder">Source Builder</button>
+        <button class="tab" data-tab="analyst">Analyst Workbench</button>
+        <button class="tab" data-tab="packs">Search Pack Studio</button>
+        <button class="tab" data-tab="controls">Controls</button>
+        <button class="tab" data-tab="blueprint">Blueprint</button>
+      </nav>
+
+      <div class="toast" id="toast" hidden></div>
+
+      <main class="workspace-grid">
+        <aside class="panel sidebar">
+          <section class="panel-block">
+            <p class="section-label" id="sidebar-primary-label">Recent runs</p>
+            <div id="case-queue"></div>
+          </section>
+
+          <section class="panel-block panel-block-tight">
+            <p class="section-label" id="sidebar-secondary-label">Coverage</p>
+            <div id="pilot-posture"></div>
+          </section>
+        </aside>
+
+        <section class="panel main-panel" id="workspace"></section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>

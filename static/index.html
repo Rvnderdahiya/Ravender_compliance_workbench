@@ -3,53 +3,94 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ravender Workbench</title>
+    <title>Ravender Evidence Search V1</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">Compliance Search Operations</p>
-          <h1 id="hero-title">Ravender Workbench</h1>
-          <p class="hero-text" id="hero-text">
-            Website investigation for analysts, with a builder flow for defining new sources step by step.
-          </p>
-        </div>
-        <div class="hero-stats" id="hero-stats"></div>
+    <main class="page-shell">
+      <header class="hero-card">
+        <p class="eyebrow">Version 1</p>
+        <h1 id="hero-title">Google Evidence Search</h1>
+        <p class="hero-copy" id="hero-copy">
+          One focused workflow for daily search evidence collection with approved domain filtering.
+        </p>
       </header>
 
-      <nav class="tab-row" id="tab-row">
-        <button class="tab is-active" data-tab="public">Website Investigator</button>
-        <button class="tab" data-tab="builder">Source Builder</button>
-        <button class="tab" data-tab="analyst">Analyst Workbench</button>
-        <button class="tab" data-tab="packs">Search Pack Studio</button>
-        <button class="tab" data-tab="controls">Controls</button>
-        <button class="tab" data-tab="blueprint">Blueprint</button>
-      </nav>
+      <section class="content-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <p class="section-label">Single Task</p>
+            <h2>Create Search Request</h2>
+          </div>
 
-      <div class="toast" id="toast" hidden></div>
+          <div class="form-grid">
+            <label for="subject-type">Search type</label>
+            <select id="subject-type">
+              <option value="Person">Person</option>
+              <option value="Company">Company</option>
+            </select>
 
-      <main class="workspace-grid">
-        <aside class="panel sidebar">
-          <section class="panel-block">
-            <p class="section-label" id="sidebar-primary-label">Recent runs</p>
-            <div id="case-queue"></div>
-          </section>
+            <label for="subject-name">Name to search</label>
+            <input id="subject-name" type="text" placeholder="Example: John A Doe or Acme Fabrication LLC" />
 
-          <section class="panel-block panel-block-tight">
-            <p class="section-label" id="sidebar-secondary-label">Coverage</p>
-            <div id="pilot-posture"></div>
-          </section>
-        </aside>
+            <label for="subject-details">Designation or demographic details</label>
+            <textarea id="subject-details" placeholder="Example: Director, Texas, DOB 1986-02-14, address details"></textarea>
 
-        <section class="panel main-panel" id="workspace"></section>
-      </main>
-    </div>
+            <label for="google-pages">Google depth</label>
+            <select id="google-pages">
+              <option value="1">First page</option>
+              <option value="2">Up to page 2</option>
+              <option value="3">Up to page 3</option>
+            </select>
 
+            <label class="checkbox-row">
+              <input id="photo-check-required" type="checkbox" />
+              <span>Photo check required</span>
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="create-request" class="btn-primary">Create Request Folder</button>
+          </div>
+
+          <p class="hint-text">
+            This step creates and organizes the request. Google automation and evidence capture execution will be added in the next step.
+          </p>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <p class="section-label">Run Workspace</p>
+            <h2>Local Folder</h2>
+          </div>
+          <p class="path-box" id="workspace-path"></p>
+
+          <div class="policy-grid">
+            <section>
+              <h3>Approved Domain Hints</h3>
+              <ul id="allowed-domains" class="chip-list"></ul>
+            </section>
+            <section>
+              <h3>Blocked Domains</h3>
+              <ul id="blocked-domains" class="chip-list"></ul>
+            </section>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <p class="section-label">Recent Requests</p>
+          <h2>Today Queue</h2>
+        </div>
+        <div id="jobs-list" class="jobs-list"></div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
     <script src="/static/app.js"></script>
   </body>
-  </html>
+</html>

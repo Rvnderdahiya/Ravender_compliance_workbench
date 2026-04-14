@@ -20,7 +20,7 @@ REPO = WorkbenchRepository(engine=build_engine(), state_path=DATA_DIR / "workben
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
-    server_version = "RavenderWorkbench/0.6"
+    server_version = "RavenderWorkbench/0.7"
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
@@ -91,6 +91,18 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": "url is required"}, status=HTTPStatus.BAD_REQUEST)
                     return
                 self._send_json(REPO.run_public_investigation(url, query, max_pages))
+                return
+
+            if path == "/api/v1/search-requests":
+                self._send_json(
+                    REPO.create_v1_search_request(
+                        subject_type=str(payload.get("subjectType", "")).strip(),
+                        subject_name=str(payload.get("subjectName", "")).strip(),
+                        subject_details=str(payload.get("subjectDetails", "")).strip(),
+                        google_pages=int(payload.get("googlePages", 1)),
+                        photo_check_required=bool(payload.get("photoCheckRequired", False)),
+                    )
+                )
                 return
 
             if path == "/api/source-builder/drafts":
